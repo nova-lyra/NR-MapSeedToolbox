@@ -1,0 +1,2217 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>NR 地图种子编辑器</title>
+<script src="data.js"></script>
+<style>
+  :root{--bg:#12151c;--panel:#1a1f2a;--line:#2c3442;--fg:#e8ecf4;--dim:#93a0b5;--acc:#6db3ff;--warn:#ffb454;--ok:#7ede9a}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.6 "Microsoft YaHei",system-ui,sans-serif;display:flex;height:100vh}
+  #left{flex:1;position:relative;overflow:auto;padding:12px}
+  #right{width:470px;min-width:470px;background:var(--panel);border-left:1px solid var(--line);overflow:auto;padding:14px}
+  .mapwrap{position:relative}
+  .mapwrap img.base{display:block;width:750px;height:750px}
+  .pt{position:absolute;transform:translate(-50%,-50%);cursor:pointer;z-index:5}
+  .pt img{display:block;pointer-events:none}
+  .pt:hover{filter:brightness(1.4) drop-shadow(0 0 6px #fff)}
+  .pt.sel img{filter:drop-shadow(0 0 8px #ffd24a)}
+  /* ★ 2026-09-18 用户要求：据点的「属性」改成【文字写在图标上方】，⛔ 不再叠属性小图标 */
+  .attr{position:absolute;left:50%;top:-2px;transform:translate(-50%,-100%);white-space:nowrap;
+        font-size:13px;font-weight:700;letter-spacing:.5px;pointer-events:none;
+        text-shadow:0 0 4px #000,0 0 4px #000,0 0 6px #000}
+  /* ★ 找不到图标素材的类型（粪坑/锻造村）→ 地图上直接写文字（用户 2026-09-18） */
+  .slotTxt{font-size:12px;font-weight:700;color:#ffd24a;background:rgba(8,10,16,.72);
+           border:1px solid rgba(255,210,74,.55);border-radius:6px;padding:1px 6px;white-space:nowrap;
+           text-shadow:0 0 4px #000;pointer-events:none}
+  /* ★ 小营地/小屋/车队：用户说「根本不重要…弄那么大干什么，还干扰我的修改」⇒ 很小很暗，不抢视线 */
+  .campTxt{font-size:10px;color:#8f98a8;text-shadow:0 0 3px #000,0 0 3px #000;white-space:nowrap;pointer-events:none}
+  /* ★ 2026-09-18 用户要求（原话：「你就不可以让上面的虚化显示吗，位置相近的那些」）
+     ⇒ 同一位置被压住的那个身份【虚化画出来】（半透明+小一号+错开一点），不再直接不画；能点、能看名字。
+        全库这种"叠在一块"的点有 454 个（以前完全看不到）。 */
+  .ghostP{position:absolute;transform:translate(-50%,-50%);cursor:pointer;z-index:4;opacity:.5}
+  .ghostP img{display:block;pointer-events:none;filter:saturate(.55)}
+  .ghostP:hover{opacity:.95}
+  .ghostP .glab{position:absolute;left:50%;top:100%;transform:translate(-50%,1px);white-space:nowrap;
+                font-size:10px;color:#9fb4d8;text-shadow:0 0 3px #000,0 0 3px #000;pointer-events:none}
+  /* ★ 使用教程：可拖拽的悬浮窗（用户 2026-09-18）—— 不跟右侧面板挤在一起，能收起、能再打开 */
+  #tutWin{position:fixed;right:16px;top:64px;width:400px;max-height:76vh;overflow:hidden;z-index:60;
+          background:rgba(14,17,24,.97);border:1px solid var(--line);border-radius:10px;
+          box-shadow:0 10px 32px rgba(0,0,0,.55);display:none}
+  #tutBar{cursor:move;user-select:none;display:flex;justify-content:space-between;align-items:center;
+          padding:7px 10px;background:#1b2030;border-bottom:1px solid var(--line);
+          font-weight:700;font-size:14px;color:#ffd24a;border-radius:10px 10px 0 0}
+  #tutBar .tutx{cursor:pointer;color:#98a2b3;font-weight:700;padding:0 4px}
+  #tutBar .tutx:hover{color:#ff5c5c}
+  #tutBar .tutmin{cursor:pointer;color:#98a2b3;font-weight:700;padding:0 5px}
+  #tutBar .tutmin:hover{color:#ffd24a}
+  /* 最小化后只剩这个小按钮（不挡路），点一下再展开；也可以拖着挪位置 */
+  #tutMini{position:fixed;right:16px;top:64px;z-index:59;display:none;cursor:move;user-select:none;
+           align-items:center;gap:4px;padding:4px 8px;border-radius:8px;
+           background:rgba(20,24,34,.95);border:1px solid var(--line);
+           box-shadow:0 6px 16px rgba(0,0,0,.5);font-size:13px;font-weight:700;color:#ffd24a}
+  #tutMini:hover{border-color:#ffd24a}
+  #tutMini .z{font-size:14px;color:#98a2b3}
+  #tutBody{padding:8px 12px 12px;overflow:auto;max-height:calc(76vh - 36px);font-size:13px;line-height:1.75;color:#dfe4ee}
+  #tutBody h4{margin:10px 0 4px;font-size:13px;color:#6db3ff;border-left:3px solid #6db3ff;padding-left:6px}
+  #tutBody ol,#tutBody ul{margin:2px 0 6px 18px;padding:0}
+  #tutBody li{margin:2px 0}
+  #tutBody code{background:#0d1017;border:1px solid var(--line);border-radius:4px;padding:0 4px;color:#ffd24a;font-size:12px}
+  #tutBody .warn{color:#ff9d9d}
+  .lab{position:absolute;left:50%;top:-6px;transform:translate(8px,-50%);white-space:nowrap;font-size:12px;color:#fff;text-shadow:0 0 4px #000,0 0 4px #000}
+  .zone{position:absolute;border-radius:50%;border:3px solid #6db3ff;transform:translate(-50%,-50%);pointer-events:none;z-index:3}
+  .zone.d2{border-color:#c88cff}
+  .zcircle{position:absolute;pointer-events:none;z-index:3;opacity:.85}
+  .zonehit{position:absolute;border-radius:50%;cursor:pointer;z-index:6;
+           border:2px dashed rgba(109,179,255,.55);background:rgba(109,179,255,.06)}
+  .zonehit.d2{border-color:rgba(200,140,255,.6);background:rgba(200,140,255,.07)}
+  .zonehit:hover{border-color:#ffd24a;background:rgba(255,210,74,.12)}
+  .zonehit.pick{border-color:#ffd24a;background:rgba(255,210,74,.14)}
+  .ztitle{position:absolute;transform:translate(-50%,-50%);white-space:nowrap;font-size:17px;font-weight:700;color:#6db3ff;text-shadow:0 0 5px #000,0 0 5px #000;pointer-events:none;z-index:8}
+  .ztitle.d2{color:#c88cff}
+  .mapinfo{position:absolute;left:10px;top:10px;z-index:9;background:rgba(10,12,18,.82);border:1px solid var(--line);
+           border-radius:8px;padding:8px 12px;line-height:1.8;pointer-events:none}
+  .mapinfo b{color:#fff}
+  .mapinfo .k{color:var(--dim);margin-right:6px}
+  h2{font-size:16px;margin:0 0 8px;color:var(--acc)}
+  h3{font-size:13px;margin:16px 0 6px;color:var(--dim);border-bottom:1px solid var(--line);padding-bottom:4px}
+  .kv{display:flex;justify-content:space-between;gap:8px;padding:3px 0;border-bottom:1px dashed #232a36}
+  .kv span:last-child{color:#fff;text-align:right}
+  select,input,button{background:#131722;color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:6px 8px;font:inherit;width:100%}
+  button{cursor:pointer;background:#22304a;border-color:#33507d}
+  button:hover{background:#2b3d5e}
+  button.primary{background:#2d6cdf;border-color:#4a8bff}
+  button.warn{background:#5a3a20;border-color:#8a5a2a}
+  .cand{display:flex;justify-content:space-between;align-items:center;gap:6px;padding:5px 8px;margin:3px 0;background:#131722;border:1px solid var(--line);border-radius:6px;cursor:pointer}
+  .cand:hover{border-color:var(--acc)}
+  .cand.sel{border-color:#ffd24a;background:#252033}
+  .cand small{color:var(--dim);white-space:nowrap}
+  .hint{color:var(--dim);font-size:12px;margin:6px 0}
+  .checks{display:grid;grid-template-columns:1fr 1fr;gap:3px 12px;margin-top:8px}
+  .checks label{display:flex;align-items:center;gap:6px;color:var(--fg);min-width:0;white-space:nowrap}
+  .checks input{width:auto;margin:0;flex:0 0 auto}
+  .row{display:flex;gap:8px;margin-top:8px;align-items:center}
+  .row label{color:var(--dim);white-space:nowrap;min-width:56px}
+  .mod{color:var(--warn)}
+  .ok{color:var(--ok)}
+  .card{background:#131722;border:1px solid var(--line);border-radius:8px;padding:8px;margin-top:6px}
+  /* 出生点（用户 2026-09-17 指定）：用游戏图标 MENU_MAP_151，只画一个，点它换出生点位 */
+  .spawn{position:absolute;transform:translate(-50%,-50%);cursor:pointer;z-index:9;
+         filter:drop-shadow(0 0 3px rgba(0,0,0,.9))}
+  .spawn.sel img{outline:2px solid #ff5c5c;outline-offset:2px;border-radius:6px}
+  .sticklab{position:absolute;transform:translate(-50%,0);font-size:12px;white-space:nowrap;
+            color:#ffd24a;background:rgba(0,0,0,.55);padding:1px 5px;border-radius:6px;z-index:9;pointer-events:none}
+  .cand.off{opacity:.45;cursor:default}
+  /* 事件点位的小圆点（只在编辑某个事件时出现；⛔ 不是图标、不铺满屏） */
+  .evdot{position:absolute;width:12px;height:12px;margin:-6px 0 0 -6px;border-radius:50%;
+         background:rgba(109,179,255,.35);border:2px solid rgba(109,179,255,.8);cursor:pointer;z-index:7}
+  .evdot:hover{background:rgba(109,179,255,.7)}
+  .evdot.on{background:#ffd24a;border-color:#fff;width:16px;height:16px;margin:-8px 0 0 -8px;z-index:9}
+</style>
+</head>
+<body>
+<div id="left"><div class="mapwrap" id="mapwrap"><img class="base" id="base" src="map0.jpg"><div class="mapinfo" id="mapinfo"></div><div id="layer"></div></div></div>
+<div id="right">
+  <h2>NR 地图种子编辑器</h2>
+  <!-- ★ 2026-09-18：加版本时间戳 —— 用户改完页面后常遇到"缓存着旧页面还以为没生效"，这里一眼可辨 -->
+  <div class="hint" id="buildInfo" style="opacity:.8">页面版本：—</div>
+  <div class="row"><button id="tutBtn" class="primary" onclick="tutToggle()">📖 使用教程</button></div>
+  <div class="hint" id="srcInfo">数据源：—</div>
+
+  <h3>① 先选「哪个夜王 × 哪种地形」</h3>
+  <div class="row"><label>夜王</label><select id="nightSel" onchange="onCombo()"></select></div>
+  <div class="row"><label>地形</label><select id="rareSel" onchange="onCombo()"></select></div>
+  <div class="row"><select id="seedSel"></select></div>
+  <div class="row"><button class="primary" onclick="loadSeed()">载入这个种子</button></div>
+  <div class="hint" id="comboHint"></div>
+
+  <h3>② 当前种子</h3>
+  <div id="seedInfo">（还没载入）</div>
+
+  <h3>③ 第1夜 / 第2夜 boss（点开换人）</h3>
+  <div class="row"><button onclick="showNight(1)">第1夜：<span id="n1txt">-</span></button></div>
+  <div class="row"><button onclick="showNight(2)">第2夜：<span id="n2txt">-</span></button></div>
+
+  <h3>④ 地图显示（勾什么画什么）</h3>
+  <div class="checks">
+    <label><input type="checkbox" id="cbSeg" checked onchange="render()">夜战缩圈</label>
+    <label><input type="checkbox" id="cbName" checked onchange="render()">据点名字</label>
+    <label><input type="checkbox" id="cbAllName" onchange="render()">名字全显示</label>
+    <label><input type="checkbox" id="cbMerchant" checked onchange="render()">山羊交易（整图最多一个）</label>
+    <label><input type="checkbox" id="cbFixMer" onchange="render()">普通商人（主城/营地/要塞旁）</label>
+    <label><input type="checkbox" id="cbHorde" onchange="render()">夜潮点位</label>
+    <label><input type="checkbox" id="cbGrace" onchange="render()">赐福</label>
+    <label><input type="checkbox" id="cbHawk" onchange="render()">灵魂鹰</label>
+    <label><input type="checkbox" id="cbScarab" onchange="render()">粪金龟</label>
+    <label><input type="checkbox" id="cbMisc" onchange="render()">其它固定点</label>
+    <label><input type="checkbox" id="cbStarter" checked onchange="render()">出生点</label>
+  </div>
+  <div class="hint">赐福／灵魂鹰／坑道这些位置固定、种子改不了它们（默认不显示）；夜潮点位只在夜潮事件触发时才出现（默认不显示）。
+    <br>⭐ <b>出生点只画一个</b>（你落地的地方，用游戏图标）—— 点它可以从原版这 9 个出生点里换。</div>
+
+  <h3>⑤ 选中的位置（点地图上的点）</h3>
+  <div id="sel">（还没点）</div>
+
+  <h3>⑦ 普通山羊交易（地图上偶尔出现的那个）</h3>
+  <div id="plainMerBox">（还没载入种子）</div>
+
+  <h3>⑧ 这张图的特殊事件</h3>
+  <div id="eventBox">（还没载入种子）</div>
+
+  <h3>⑥ 导出</h3>
+  <div class="card" style="margin-top:0">
+    <div class="hint" style="margin-top:0"><b>① 改这张图（覆盖现有排布）</b>：出 CSV，Smithbox 里<b>不勾</b> Append 导入 → 就把原来那张图换成你改的样子。测完记得用备份还原 bin。</div>
+    <div class="row"><button onclick="exportModify()">导出 CSV（据点表 + 夜boss缩圈表）</button></div>
+  </div>
+  <div class="card">
+    <div class="hint" style="margin-top:0">⛔ <b>「存成新种子」已删除</b>（2026-09-18 用户定：
+      实测游戏<b>不认"新增行"</b>，空闲种子号在 bin 里一行都没有 ⇒ 造不出新种子）。
+      <b>现在只改你读进来的游戏内已有的种子</b> —— 改完用 ① 导出、锁定那张图出击即可。</div>
+  </div>
+  <div id="exportMsg" class="hint"></div>
+
+  <h3>⑨ 已修改地图（暂存 + 一次全导出）</h3>
+  <div id="modBox">（还没有修改过）</div>
+  <div id="modMsg" class="hint"></div>
+  <h3>导入顺序（Smithbox）</h3>
+  <div class="hint">备份 bin → 点中同名表 → Tools ▸ Data Transfer ▸ Import ▸ Import from file →
+    <b>新增的行勾 Append New Rows，覆盖的行不勾</b> → Ctrl+S。详见同目录「使用说明.txt」。</div>
+</div>
+
+<!-- ★ 使用教程：可拖拽的悬浮窗（用户 2026-09-18）。默认不显示，用最上面那个「📖 使用教程」按钮开关 -->
+<div id="tutWin">
+  <div id="tutBar"><span>📖 使用教程（按住这条标题栏可以拖到任意位置）</span>
+    <span><span class="tutmin" onclick="tutMin()" title="缩成小按钮（不挡路，随时点回来）">—</span>
+    <span class="tutx" onclick="tutHide()" title="完全关掉">✕</span></span></div>
+  <div id="tutBody">
+    <h4>① 先让编辑器读到游戏数据</h4>
+    <ol>
+      <li>双击 <code>打开地图种子编辑器.bat</code> → 启动器里选一份 <code>regulation.bin</code> → 点【读取】</li>
+      <li>读完点【打开编辑器网页】（读一次要几秒，进度条走完再点）</li>
+      <li>以后改过 bin、或换了别的 bin → 双击 <code>刷新数据.bat</code> 重新生成数据</li>
+    </ol>
+
+    <h4>② 改一颗种子（最常用）</h4>
+    <ol>
+      <li>右上 <b>①</b> 先选「哪个夜王 × 哪种地形」→ 选中一颗种子 → 点【载入这个种子】</li>
+      <li>地图上<b>哪里想改就点哪里</b>，右边面板点一下就能换：
+        <ul>
+          <li><b>③</b> 第 1 夜 / 第 2 夜的 boss</li>
+          <li><b>夜战缩圈</b>：点地图上的圈 → 换这一夜打哪片区域</li>
+          <li><b>据点</b>：点据点 → 换类型和属性。名字长这样：<code>遗迹（毒）</code>·<code>营地（发狂）</code>·<code>教堂（圣）</code>
+            <br>· 据点分两族，<b>只能在自己这一族里换</b>：
+            <br>　<b>地块族</b>＝要塞 · 营地 · 遗迹 · 教堂 · 锻造村 · 粪坑
+            <br>　<b>点位族</b>＝魔法师塔 · 古老魔法师塔 · 血瓶教堂 · 高级村落商人 · 小营地 · 车队 · 小屋
+            <br>· 粪坑／锻造村／小营地／车队／小屋 游戏里没有图标素材 ⇒ 地图上直接写成文字</li>
+          <li><b>出生点</b>：点那个小人 → 换落地位置</li>
+        </ul>
+      </li>
+      <li><b>⑦</b> 山羊交易、<b>⑧</b> 特殊事件（一张图可挂多个事件，可选第 1 天 / 第 2 天）</li>
+      <li>改完<b>不用马上导出</b>：<b>⑨</b> 会自动把改动存住（换种子、刷新页面都不丢）</li>
+      <li>改够了 → <b>⑨</b> 点【一次导出全部已修改】→ 一次出全（按表合并成 3 份 CSV）</li>
+    </ol>
+
+    <h4>③ 导入 Smithbox（关键：覆盖的行⛔不能勾 Append）</h4>
+    <ol>
+      <li><b>先备份</b>：把 <code>regulation.bin</code> 复制一份留着（改坏了直接换回来）</li>
+      <li>用 <b>Smithbox</b> 打开这份 bin（NR 的 bin 是加密壳，只能靠 Smithbox 保存）</li>
+      <li>左边点中<b>对应的表</b> → 菜单 <code>Tools ▸ Data Transfer ▸ Import ▸ Import from file</code></li>
+      <li>选对应 CSV（文件名里就写着表名）：
+        <ul>
+          <li><code>LotResultSmallBaseAndSpot_*.csv</code> → 表 <b>LotResultSmallBaseAndSpot</b>（据点排布）</li>
+          <li><code>LotResultPlayAreaParam_*.csv</code> → 表 <b>LotResultPlayAreaParam</b>（缩圈 / 夜boss 指向）</li>
+          <li><code>LotResultMapPatternFlag_*.csv</code> → 表 <b>LotResultMapPatternFlag</b>（事件 / 第几天 / 出生点）</li>
+        </ul>
+      </li>
+      <li class="warn">⛔ 我们的 CSV 全是「改现有行」⇒ <b>不要勾 Append New Rows</b>（勾了整份不生效）</li>
+      <li>三份都导完 → 按 <code>Ctrl+S</code> 保存</li>
+      <li>进游戏验证：出击时用锁定工具锁住那张图（例：<code>地图排布锁定器.bat</code>）</li>
+    </ol>
+
+    <h4>④ 常见问题</h4>
+    <ul>
+      <li><b>编辑器显示有、进游戏没效果</b> → 十有八九是导入时勾了 Append；覆盖的行一定<b>不勾</b></li>
+      <li><b>改了好多张图</b> → 别一张张导，用 <b>⑨【一次导出全部已修改】</b></li>
+      <li><b>换了 bin、刷新过数据</b> → ⑨ 先【清空全部暂存】再改（行序号会变）</li>
+      <li><b>大空洞（DLC）</b> 本次不做，界面上也不给改</li>
+      <li>地图显示太乱 → 用 <b>④</b> 那一排勾选框，不看的关掉</li>
+      <li>这个教程窗挡路 → 点窗上的 <b>—</b> 缩成小按钮；要彻底关掉就点最上面的【📖 使用教程】</li>
+    </ul>
+  </div>
+</div>
+
+<!-- 最小化后的小按钮：只剩一个「放大」，点一下把教程窗展开回来 -->
+<div id="tutMini" onclick="tutMax()" title="展开使用教程"><span>📖</span><span class="z">⤢</span></div>
+
+<script>
+/* ===================== 中文名表（可自行修改） ===================== */
+const BOSS_CN={400:'恶兆妖鬼 玛尔基特',401:'王夫的红狼',402:'大树守卫',403:'龙装大树守卫',404:'王室骑士 罗蕾塔',405:'狮子混种',406:'王室幽魂',407:'老狮子',408:'飞龙',412:'尸脸',413:'腐败树灵',414:'祖灵',415:'接肢的贵族后裔',416:'黑剑眷属',417:'黄金树的化身',418:'熔岩土龙／大土龙',419:'萨米尔的古英雄',427:'贪食魔龙',428:'蜈蚣恶魔',429:'公爵的挚爱 芙蕾雅',430:'融铁恶魔',431:'无名王者',432:'冷冽谷的舞娘',433:'神皮使徒',434:'神皮双人组',435:'成熟坠星兽',436:'接肢葛瑞克',437:'提比亚的唤声船',438:'黑刀刺客',439:'铃珠猎人',440:'黑夜骑兵(双人)',441:'米兰达之花',442:'黄金河马',443:'死亡仪式鸟',444:'亚人女王',445:'古龙',446:'诺克斯龙人兵',447:'熔炉骑士与黄金河马',448:'战场指挥官 欧尼尔',449:'异国指挥官 尼阿尔',11000:'咒剑士与神兽战士',11001:'大红熊',11002:'死亡骑士',11003:'痛苦恶魔与地底恶魔',11004:'血王 莫格',11005:'神兽舞狮',11006:'骑士 亚尔特留斯',11007:'恶魔王子'};
+const ICON_CN={1:'赐福',2:'教堂',3:'遗迹',4:'村落商人',5:'封印监牢',6:'魔法师塔',7:'要塞',10:'营地',11:'主城',13:'灵魂鹰',16:'黑名Boss',17:'粪金龟',21:'普通商人',22:'古老魔法师塔',23:'坑道',24:'大教堂',25:'山羊交易',28:'红名Boss',30:'教堂(已清空)',36:'监牢·红皮强敌',51:'据点',60:'行动目标',61:'地形强化赐福',62:'隐藏宝藏',71:'据点(未命名)',73:'据点(未命名)',74:'据点(未命名)',75:'据点(未命名)',76:'据点(未命名)',77:'毒池',78:'锻造村',79:'据点(未命名)',137:'灵脉',178:'粪金龟'};
+const NIGHT_CN={0:'黑夜野兽 格拉狄乌斯',1:'艾德雷',2:'格诺斯塔',3:'玛利斯',4:'利普拉',5:'弗格尔',6:'卡莉果',7:'布德奇冥',8:'哈尔莫尼亚',9:'斯特拉格斯'};
+const EVENT_CN={120:'额外夜王出现',140:'疯狂之塔',180:'夜潮',200:'陨石坠落',210:'灵庙',230:'古老魔法师塔',424:'山羊交易出现',800:'第1天事件',801:'第2天事件'};
+const RARE_CN={0:'普通地图',1:'雪山',2:'火山',3:'腐败森林',4:'大空洞',5:'隐城'};
+const CASTLE_CN={4941:'失乡骑士城',4942:'投壶山妖城',4943:'熔炉城'};
+const TIER_CN={'1':'低阶','2':'中阶','3':'高阶'};
+const RARE_MOD={0:10,1:11,2:12,3:13,4:14,5:15};              // 地形 → 登记行的 modifier
+const RARE_FLAG={0:7600,1:7601,2:7602,3:7603,4:7604,5:7605}; // 地形 → 登记行的 eventFlag
+const REGULAR_MODS=[0,10,11,12,13,14,15];                    // 「常规行」= 会被正常抽到的行
+const EMPTY_SLOT=4030;                                       // 本体未占用的空槽（"这里不放东西"用）
+/* ==== 中文名修正表（用户 2026-09-17 指定；优先级高于 data.js 里的名字，重新生成 data.js 也不会丢）==== */
+const SLOT_CN_FIX={3790:'高级村落商人',
+  4300:'野外小营地A',4301:'野外小营地B',4302:'野外小营地C',4330:'野外小营地（腐败森林）',
+  4340:'野外小营地D',4341:'野外小营地E',4350:'野外小营地F',
+  3200:'营地（标准）',3210:'营地（塔）',3220:'营地（废墟）'};
+const ATT_CN_FIX={129:'雾林西·西北',313:'第三教堂',350:'极西南',351:'暴风丘·城门南',
+  352:'战技师小屋西',356:'暴风丘坑道口上方',357:'湖东南',358:'骑兵桥东',360:'圣桥东北',
+  364:'召水村猎鹰下方'};
+/* ==== 出生点（每张图 2 行：主 Starter Major / 次 Starter Minor；位置不可像据点那样随便挪，
+        只能在这 18 个"原版出生点位"之间换）==== */
+const STARTER_CN={121:'林边',122:'城门前',123:'暴风丘·城门前北',124:'暴风丘·城门前北 Alt',
+  125:'路点遗迹',126:'路点遗迹 Alt',127:'召水村入口',128:'小黄金树',129:'雾林西·西北',
+  350:'极西南',351:'暴风丘·城门南',352:'战技师小屋西',356:'暴风丘坑道口上方',357:'湖东南',
+  358:'骑兵桥东',360:'圣桥东北',362:'小黄金树',364:'召水村猎鹰下方'};
+/* 每个出生点位"不能出现在哪些地形"（数字 = rareMap：1雪山 2火山 3腐败森林 5隐城；空 = 哪都能用） */
+const STARTER_EX={121:[5],122:[5],123:[1],124:[1],125:[3],126:[3],127:[2],128:[3],129:[2],
+  350:[5],351:[5],352:[1],356:[1,2],357:[3],358:[3],360:[2],362:[3],364:[]};
+const STARTER_MAJOR=[121,122,123,124,125,126,127,128,129];
+const STARTER_MINOR=[350,351,352,356,357,358,360,362,364];
+const starterCN=a=>STARTER_CN[+a]||('出生点位 '+a);
+/* ==== 出生点的真机制（2026-09-17 解出：只改下面那两行的 attachId 是【不生效】的）====
+   玩家落在哪 = pattern 的「起始区」编号 = 登记表 LotResultMapPatternFlag 里 modifierSet=190 的那一行，
+   modifier 700~708 = 起始区 1~9（Smithbox 官方枚举：190 = "Start Location"，700~708 = "Start - Area 1~9"）。
+   证据：① 520 张图【每张】都有一个起始区编号；② DLC/大空洞那 200 张图在据点表里【根本没有】出生点那两行，
+   但它们照样有起始区编号 ⇒ 落地点只能来自这个编号；③ 起始区 k ↔ 出生点地块 ≡ 图里"次"那一行（9/9 全对齐，
+   另有 9 张图"主"那行和编号对不上、"次"全对）；④ 每个起始区的出生点在 SortieStartingPoint 里各有 1~3 行，
+   但同一个出生点的 spawnPointEntityId 完全相同（不同的只是"进场方向"）⇒ 一个起始区 = 一个固定落地点。
+   ⇒ 换出生点 = 改起始区编号（并把这张图里那两行落点数据一起改，保持和原版一致）。 */
+const START_SET=190, START_BASE=700;                 // 700~708 = 起始区 1~9（大空洞那套 160/13000~13002 本次不做）
+const AREA_MAJOR=[121,122,123,124,125,126,127,128,129];   // 起始区 k → 这张图里"主"那一行的点位
+const AREA_MINOR=[350,351,352,356,357,358,360,362,364];   // 起始区 k → 落地点（= "次"那一行）
+const areaCN=k=>starterCN(AREA_MINOR[(+k)-1]);            // 起始区 → 地名（和"次"点位同名）
+/* 教堂 ⇄ 魔法师塔 ⇄ 古老魔法师塔 ⇄ 高级村落商人 ⇄ 野外小营地：原版在同一批点位上互相替换（有数据证据） */
+const SWAP_FAMILY=['4100','4000','4090','3790','4300','4301','4302','4340','4341','4350'];
+/* 监牢：变体 → 牢里到底是谁（2026-09-17 从【场地 msb + 事件脚本 emevd】实测得出；
+   kind=single 单体（就是这一只） / group 族（游戏在族内挑一只）。
+   生成脚本：数据生成\监牢变体表.py（改了游戏版本要重跑） */
+const EG_DETAIL={"4650":{"letter":"A","tier":"低阶","variants":{"2":{"kind":"single","ents":[46500860],"label":"凶兆"},"3":{"kind":"single","ents":[46500870],"label":"墓守决斗者"},"4":{"kind":"group","ents":[46500820,46500821,46500822,46500824,46500826,46500827],"label":"阿祖拉兽人（弯刀）／阿祖拉兽人（盾）／阿祖拉兽人（砍刀）","group":46505840},"5":{"kind":"group","ents":[46500830,46500831,46500832,46500833,46500835,46500836,46500837],"label":"有翼狮子混种／狮子混种／鳞皮狮子混种","group":46505850}},"roster":["凶兆","墓守决斗者","有翼狮子混种","狮子混种","阿祖拉兽人（弯刀）","阿祖拉兽人（盾）","阿祖拉兽人（砍刀）","鳞皮狮子混种"]},"4660":{"letter":"B","tier":"中阶","variants":{"2":{"kind":"group","ents":[46600820,46600821,46600822],"label":"结晶人（法杖）／结晶人（环刃）／结晶人（矛）","group":46605820},"3":{"kind":"group","ents":[46600830,46600831],"label":"玛瑙王／白玉王","group":46605830},"4":{"kind":"group","ents":[46600840,46600841,46600842],"label":"失乡骑士（双剑）／失乡骑士（戟）／失乡骑士（盾）","group":46605840},"5":{"kind":"group","ents":[46600851,46600852],"label":"诺克斯僧侣／诺克斯剑士","group":46605850},"6":{"kind":"single","ents":[46600860],"label":"猎犬骑士"}},"roster":["失乡骑士（双剑）","失乡骑士（戟）","失乡骑士（盾）","猎犬骑士","玛瑙王","白玉王","结晶人（法杖）","结晶人（环刃）","结晶人（矛）","诺克斯僧侣","诺克斯剑士"]},"4670":{"letter":"C","tier":"中阶","variants":{"0":{"kind":"single","ents":[46700800],"label":"龙人兵"},"1":{"kind":"single","ents":[46700810],"label":"神皮使徒"},"2":{"kind":"single","ents":[46700820],"label":"神皮贵族"},"3":{"kind":"single","ents":[46700830],"label":"熔炉骑士（剑）"},"4":{"kind":"single","ents":[46700840],"label":"熔炉骑士（树枪）"}},"roster":["熔炉骑士（剑）","熔炉骑士（树枪）","神皮使徒","神皮贵族","龙人兵"]},"4680":{"letter":"D","tier":"高阶","variants":{"0":{"kind":"single","ents":[46800800],"label":"死亡仪式鸟"},"1":{"kind":"single","ents":[46800810],"label":"古龙"},"2":{"kind":"group","ents":[46800820,46800821],"label":"神皮使徒／神皮贵族","group":46805800}},"roster":["古龙","死亡仪式鸟","神皮使徒","神皮贵族"]}};
+const egInfo=(slot,v)=>{const d=EG_DETAIL[String(slot)];return d?(d.variants[String(v)]||null):null;};
+const egKindTxt=i=>i?(i.kind==='single'?'单体（就是这一只）':'族（游戏在族内随机挑一只）'):'';
+const showOf=id=>{const e=document.getElementById(id);return !!(e&&e.checked);};
+const KIND_CN={field:'野外头目',night:'夜Boss',basement:'地下室Boss',horde:'夜潮',evergaol:'封印监牢',castle:'主城',base:'据点',large:'大据点',unknown:'未命名据点'};
+/* ★ 据点属性角标（用户 2026-09-16 亲授）：42600 起依次为 */
+const ATTR_ICON_CN={42600:'魔力',42601:'火焰',42602:'雷电',42603:'圣',42604:'毒',42605:'腐败',
+                    42606:'出血',42607:'咒死',42608:'冻伤',42609:'睡眠',42610:'发狂'};
+const ATTR_OF=v=>ATTR_ICON_CN[v]||'';
+/* ★ 2026-09-18 用户要求：属性改成【文字写在图标上方】⇒ 给每种属性一个文字颜色 */
+const ATTR_COLOR={42600:'#7fb6ff',42601:'#ff8a3d',42602:'#ffe45c',42603:'#ffd98a',42604:'#9ede5a',
+                  42605:'#e05a8f',42606:'#ff5c5c',42607:'#c08cff',42608:'#7fe3ff',42609:'#b48cff',42610:'#ffd24a'};
+/* ★ 2026-09-18 用户要求：这些据点「用纯类型图标」——原版数据里 icon 号是 0（没图标）⇒ 按类型补上
+   · 小营地类（Camp A~F / Small Camp Caravans：槽 4300/4301/4302/4330/4340/4341/4350/4401/4500/4501）
+     → 一律用【营地图标】（槽号 10 → MENU_MenuIcon_42009）
+   · ⚠️ 毒池(5000~5006)/锻造村(5010/5011)：原版 WorldMapPointIconParam 指向 42047/42048，
+     但**游戏图集里根本没有这两个图标文件**（2026-09-18 把当前游戏的两份图集 01_common_h / 01_common_l
+     都重抽了一遍确认缺号）⇒ 这两个暂时用兜底图标 + 文字说明，图标等用户从对照表里指认 */
+/* 小营地/小屋/车队 原版就没图标 ⇒ 已改走「文字显示」（见 NO_ICON_SLOTS），这里不再给它们塞图标 */
+const TYPE_ICON_FIX={};
+/* ★★ 2026-09-18 用户要求（原话）：
+     「选项的类别别写什么遗迹a,b,c，写成遗迹（毒）……这些据点改成点一下，可以全部的这些据点随便换，
+       比如营地，要塞，毒池，锻造村，还有之前我不小心给你漏说了一个有怪物的，不是拿血瓶的那个，
+       也叫教堂的，教堂也有属性之分。显示就是遗迹(毒)，教堂（圣）营地（发狂），这种类似的。」
+   ⇒ ① 据点名字统一 = 「类型（属性）」（无属性就只写类型）
+      ② 下表 = 「可互换的据点类型」总表（槽 → 类型短名）；表里的槽**全部互相可换**（属性一起换）
+   ⚠️ 「教堂」有两种，按用户叫法分开：
+        · 有怪物的教堂（icon 24，槽 3800/3810/5240/5242/5245/5246）→ 「教堂」（有属性）
+        · 拿血瓶的教堂（icon 2，槽 4100/4101）→ 「教堂（血瓶）」（无属性） */
+const SLOT_TYPE_CN={
+  '3000':'要塞','3030':'要塞',
+  '3200':'营地','3210':'营地','3220':'营地',
+  /* ★ 2026-09-18 用户：野外小营地不要和营地共用一个图标/名字 ⇒ 单独一类「小营地」，并且用文字显示 */
+  '4300':'小营地','4301':'小营地','4302':'小营地','4330':'小营地','4340':'小营地','4341':'小营地','4350':'小营地',
+  '4401':'小屋',                                    /* 行名 Shack（同一批小营地组里的小屋）—— 用户没点过名，待她确认 */
+  '4500':'车队','4501':'车队',                      /* Caravans（小营地的车队）—— 用户点名"也是一起的" */
+  '3400':'遗迹','3410':'遗迹','3420':'遗迹','3430':'遗迹',
+  '3800':'教堂','3810':'教堂','5240':'教堂','5242':'教堂','5245':'教堂','5246':'教堂',
+  '4100':'教堂（血瓶）','4101':'教堂（血瓶）','4130':'教堂（腐败森林）',
+  '4000':'魔法师塔','4090':'古老魔法师塔','3790':'高级村落商人',
+  '5000':'粪坑','5001':'粪坑','5002':'粪坑','5003':'粪坑','5004':'粪坑','5005':'粪坑','5006':'粪坑',
+  '5010':'锻造村','5011':'锻造村',
+  '5250':'遗迹','5252':'遗迹','5255':'遗迹','5257':'遗迹'};
+/* ★★ 2026-09-18 用户纠正（原话）：
+     「魔法师塔，血瓶教堂不可以这样改啊，魔法师塔，血瓶教堂就他们自己的点位是彼此互相可以改的。
+       营地，教堂，遗迹，锻造村，毒池这些不能混入这些血瓶教堂，魔法师塔，古老魔法师塔，
+       这几个和他们自己的同类型可以换的才是一起的，比如高级村落商人。」
+   ⇒ 据点分【两族】，**互不混改**（下面这分组不是拍的，是按"原版实际用过的落点(attachId)"聚类出来的：
+      ★ 分组按原版 520 张图里每个槽实际用过的落点(attachId)：
+           「魔法师塔，血瓶教堂不可以这样改啊…营地，教堂，遗迹，锻造村，毒池这些不能混入这些血瓶教堂，
+             魔法师塔，古老魔法师塔，这几个和他们自己的同类型可以换的才是一起的，比如高级村落商人」
+         ⭐ 分组**按原版 520 张图里每个槽实际用过的落点(attachId) 算出来的**（不是拍的）：
+           地块族 = 落点 100~129 / 2100~2129（互相重叠 0.9~1.0）；点位族 = 落点 300~320 / 350~364（共用同一批地标点）。
+         ★★ 2026-09-18 第二次纠正：**小营地/小屋/车队 归回地块族** ——
+           它们出现在 attach 300~314 的 **Minor Base（普通打点）** 上（4300 出现在 293 张图、4340 294 张、4500 333 张），
+           也就是"要打敌人的地方"，和营地/要塞/遗迹同一批点位；只有 4341/4301/4302 另外还出现在起始区那几行。
+         ⛔ 不参与换的（保持原行为）：腐败森林教堂 4130、大空洞那批 5240~5246 / 5250~5257 */
+      const PALETTE_BLOCK=['3000','3030','3200','3210','3220','3400','3410','3420','3430','3800','3810',
+                           '5000','5001','5002','5003','5004','5005','5006','5010','5011'];
+      /* ★ 点位族：魔法师塔那批地标点 + **小营地/小屋/车队**
+         ⭐ 2026-09-18 用户定（原话）：「你让小营地，车队，小屋的修改跟随血瓶教堂他们」
+         ⇒ 这三类的可换范围 = 和血瓶教堂/魔法师塔/古老魔法师塔/高级村落商人 一起（同族互换） */
+      const PALETTE_POINT=['4000','4090','4100','4101','3790',
+                           '4300','4301','4302','4330','4340','4341','4350','4401','4500','4501'];
+const PAL_GROUP=(()=>{const m={};PALETTE_BLOCK.forEach(s=>m[s]='block');PALETTE_POINT.forEach(s=>m[s]='point');return m;})();
+const PAL_HEAD={block:'② 地块族（要塞 / 营地 / 遗迹 / 教堂 / 锻造村 / 粪坑 —— 这些之间随便换）',
+                point:'② 点位族（魔法师塔 / 古老魔法师塔 / 血瓶教堂 / 高级村落商人 / 小营地 / 小屋 / 车队 —— 只在它们之间换）'};
+/* ⛔ 没有图标素材的类型 ⇒ 地图上**不画图标，直接写文字**（用户 2026-09-18）
+   粪坑/锻造村 = 官方图标号指向空号；小营地/小屋/车队 = 原版数据里组 icon 号是 0（本来就没图标） */
+const NO_ICON_SLOTS=['5000','5001','5002','5003','5004','5005','5006','5010','5011',
+                     '4300','4301','4302','4330','4340','4341','4350','4401','4500','4501'];
+const isTypeSlot=s=>SLOT_TYPE_CN[String(s)]!==undefined;
+/* ★ 2026-09-18 用户报的真 bug：「你把很多打敌人的地方划分成了落地小营地，那里明明实际是要塞那些的类别之一」，
+   例：地图 0 坐标 (57,64) 上同时有 `4300 Camp A`（无图标）和 `3810 Temple B·火焰`（火焰教堂，有图标），
+   旧优先级把两者都算 50 分 ⇒ 平手时留下了小营地、把火焰教堂丢了。
+   ⇒ 规则：**同一坐标上，有图标的据点必须压过没图标的小营地/小屋/车队**（游戏地图上玩家看到的是前者）。 */
+const CAMP_SLOTS=['4300','4301','4302','4330','4340','4341','4350','4401','4500','4501'];
+const isCampSlot=s=>CAMP_SLOTS.indexOf(String(s))>=0;
+const slotTypeName=s=>isTypeSlot(s)?SLOT_TYPE_CN[String(s)]:(cnSlot(s)||sname(s));
+/* 据点显示名 = 类型（属性）；例：遗迹（毒）· 教堂（圣）· 营地（发狂） */
+const slotLabel=(s,v)=>{const t=slotTypeName(s),a=ATTR_OF(variantIconOf(s,v));return t+(a?('（'+a+'）'):'');};
+/* 只有"全图只放一个"的特殊点才允许换位置（普通据点位置是填满的，⛔不能随便挪） */
+const POS_SWAP_OK=['4940','4552','4553','4555','4678','5300','5305'];
+
+const DATA=window.NR_DATA;
+const CN=DATA.cn||{};                     // 中文名表（写在 data.js 里，源头是 enhance_web_data.py）
+const cnNight=v=>(CN.night&&CN.night[v])||NIGHT_CN[v]||('夜王'+v);
+const cnRare=v=>(CN.rare&&CN.rare[v])||RARE_CN[v]||v;
+const cnEvent=v=>(CN.event&&CN.event[v])||EVENT_CN[v];
+const cnSlot=s=>SLOT_CN_FIX[s]||(DATA.slotCN&&DATA.slotCN[s])||'';
+let CUR=null,SEL=null,SELMODE=null,EDITS={},NEDIT={},SEL_CANDS=[];
+const $=id=>document.getElementById(id);
+/* 原版每个附着点上放过哪些地块（attachId → Set(slot)）：用来判断"这个点能不能换成那种东西" */
+const ATT_SLOTS=(()=>{const m={};for(const pid in DATA.patterns){for(const r of DATA.patterns[pid]){(m[r[1]]=m[r[1]]||new Set()).add(String(r[2]));}}return m;})();
+/* 某出生点位在原版配的是哪个起始据点（换出生点时一起换，保持和原版一致） */
+const STARTER_SLOT=(()=>{const m={};for(const pid in DATA.patterns){for(const r of DATA.patterns[pid]){const nm=String((DATA.attachPoints[r[1]]||[''])[0]);if(nm.indexOf('Starter')===0)m[r[1]]=r[2];}}return m;})();
+/* 同上，但连「变体号」一起取对：某点位上原版真用过的 (槽,变体) 组合里挑出现次数最多的那个
+   —— ⛔ 只换槽不换变体号会写出「这个槽没有的变体」（例：4302 原版只有 var 0） */
+const STARTER_PICK=(()=>{const c={};
+  for(const pid in DATA.patterns){for(const r of DATA.patterns[pid]){
+    const nm=String((DATA.attachPoints[r[1]]||[''])[0]||'');if(nm.indexOf('Starter')!==0)continue;
+    const key=r[2]+'|'+r[3];(c[r[1]]=c[r[1]]||{})[key]=(c[r[1]][key]||0)+1;}}
+  const m={};for(const a in c){let best=null,bn=-1;
+    Object.keys(c[a]).forEach(k=>{const n=c[a][k],[s,v]=k.split('|').map(Number);
+      if(n>bn||(n===bn&&best&&s<best.slot)){bn=n;best={slot:s,var:v,times:n};}});
+    m[a]=best;}
+  return m;})();
+const attCN=a=>ATT_CN_FIX[a]||((DATA.attachCN&&DATA.attachCN[a])||((DATA.attachPoints[a]||['位置 '+a])[0]));
+const isStarterAtt=a=>String((DATA.attachPoints[a]||[''])[0]).indexOf('Starter')===0;
+const isStarterMajor=a=>String((DATA.attachPoints[a]||[''])[0]).indexOf('Starter Major')===0;
+/* 这个地形下该出生点位可用吗（STARTER_EX = 不能出现的地形） */
+function starterOK(a,rare){const ex=STARTER_EX[+a]||[];return ex.indexOf(+rare)<0;}
+/* ★ 用户 2026-09-17 要求：boss 这部分【跟着 bin 走】—— bin 里写的是什么就显示什么。
+   优先级：当前 bin 的槽行名 → 该行名在本体中文表里有翻译就用中文 → 本体中文表兜底 → 编号。
+   ⭐ 这样 MMV 之类改了/新增的夜 boss 会跟着变，不再被写死的旧表挡住。 */
+const slotToBoss=s=>{const v=(DATA.slotBoss||{})[String(s)];return v?+v:0;};   // 场地槽号 → 这一夜真正要打的 boss 编号
+function nameDyn(b){const en=BOSS_NAME_FROM_BIN[b];
+  if(en)return (BOSS_CN_BY_EN[en]||en);      // bin 里有名字：有中文翻译就用中文，没有就直接用 bin 里的原名
+  return BOSS_CN[b]||'';}                     // bin 推不出来才用本体中文表兜底
+const bname=v=>{const b=+v;return b?(nameDyn(b)||('未命名'+b)):'';};
+const bossName=v=>{const b=+v;return b?(nameDyn(b)||('夜boss '+b)):'';};          // 第一/二夜 boss 用这张表（⛔别用夜王的表）
+const bossNameOfSlot=s=>{const b=slotToBoss(s);return b?bossName(b):('场地槽 '+s);}; // 给"场地槽号"也能出名字
+const iname=v=>ICON_CN[v]||(v?('图标'+v):'');
+const sname=s=>SLOT_CN_FIX[s]||((DATA.slots[s]&&DATA.slots[s][0])?DATA.slots[s][0]:('槽'+s));
+const kindOf=s=>DATA.slotKind[s]||'unknown';
+function groupOfSlot(s){for(const g in DATA.groups){if(DATA.groups[g][3].includes(s))return +g;}return 0;}
+const gname=g=>{const o=DATA.groups[g];return o?o[0]:'';};
+const iconOfSlot=s=>{const g=groupOfSlot(s);return g?(DATA.groups[g][1]||0):0;};
+function egCN(slot){const e=DATA.evergaol&&DATA.evergaol[slot];return e?('封印监牢'+e.letter+'（'+e.tierCN+'）'):'封印监牢';}
+/* 坐标 → 750 系底图（每格≈123.05px、上下翻转；有标定值就用标定值） */
+/* ★★ 位置订正表（2026-09-18 用户进游戏实测）：
+   用户原话：「血瓶的位置实际上应该是这个火焰营地的，两人显示的位置是反过来的」
+   即图 0 那处：`Major Base - Northeast Mistwood`(落点116) 与 `Minor Base - Third Church`(落点313)
+   的坐标要互换（我原显示 116=(578,270)在上面、313=(575,321)在下面，游戏里正好相反）。
+   ⚠️ 只影响编辑器里的显示，⛔ 不碰 bin 数据；以后实测发现别的点也反了，往这里加一条即可。 */
+const POS_FIX={'116':'313','313':'116'};
+function w2p(gx,gz,X,Z){const cx=(gx-41)+(X+128)/256, cy=(gz-35)+(Z+128)/256;return [123.05*cx+2.8, 746.8-123.0*cy];}
+function posOf(id,gx,gz,X,Z){
+  const fid=(POS_FIX&&POS_FIX[String(id)]!==undefined)?POS_FIX[String(id)]:id;   /* ★ 订正表 */
+  const p=DATA.pos&&DATA.pos[fid];if(p&&p[0]>0&&p[1]>0)return p;return w2p(gx,gz,X,Z);}
+/* ★ 图标真名 = MENU_MenuIcon_<iconId>：地图点给的是"槽号"，要先经 WorldMapPointIconParam 换成 iconId
+   （例：槽 11 主城 → iconId 42010 → icons/MENU_MenuIcon_42010.png）；找不到才回退旧体系 */
+const ICON_ALIAS={1:'MENU_MAP_01_Bonfire'};
+const ICON_FALLBACK='MENU_MAP_10';
+const ICONP=(DATA.iconParam)||{};
+/* 用户 2026-09-17 指定：这两个商人图标直接点名用游戏文件，别经 iconParam 绕 */
+const ICON_FILE_FIX={25:'MENU_MAP_25',21:'MENU_MAP_21'};
+/* ⭐ BOSS 名字：先查中文表，查不到就【从当前 bin 的数据里读】（槽行名）——
+   这样以后 MMV 之类新加的夜晚/野外/地下室 boss 也能显示，不会写死成"未命名Boss" */
+const BOSS_NAME_FROM_BIN=(()=>{const m={};
+  const sb=DATA.slotBoss||{};
+  Object.keys(sb).map(Number).sort((a,b)=>a-b).forEach(s=>{
+    const v=+sb[s];if(!v||m[v]!==undefined)return;
+    const raw=(cnSlot(s)||sname(s)||'');
+    if(!raw||/^（.*）$/.test(raw)||/^unknown/i.test(raw))return;      // 跳掉"（本体未占用）"这类占位名
+    const nm=raw.replace(/^[A-Za-z ]*Boss\s*[-–]\s*/,'').replace(/^Boss Raid\s*[-–]\s*/,'');
+    if(nm&&!/^（.*）$/.test(nm))m[v]=nm;});
+  return m;})();
+/* 「bin 里的英文行名 → 中文」反查表：由上表 + 本体中文表自动生成（本体没改的 boss 照样显示中文） */
+const BOSS_CN_BY_EN=(()=>{const m={};for(const b in BOSS_NAME_FROM_BIN){
+  const cn=BOSS_CN[b];if(cn)m[BOSS_NAME_FROM_BIN[b]]=cn;}return m;})();
+/* 用户 2026-09-17 指定：特殊事件的山羊交易（槽 4555）图标要和普通那只【一样】（都用 25）。
+   本体里 4555 挂在「Encounter Setup: Libra」，本体没给它图标（iconId=0）→ 这里强制补成 25。 */
+const ICON_SLOT_FIX={'4555':25};
+const iconOfSlotF=s=>{const f=ICON_SLOT_FIX[String(s)];return (f!==undefined)?f:iconOfSlot(s);};
+const icoName=id=>{ if(typeof id==='string'&&id.indexOf('MENU_')===0)return id;   /* 允许直接给文件名（2026-09-18 毒池/锻造村兜底用） */
+  const fx=ICON_FILE_FIX[+id];if(fx)return fx;
+  const ic=ICONP[String(+id)];return ic?('MENU_MenuIcon_'+ic):(ICON_ALIAS[+id]||('MENU_MAP_'+(+id<10?('0'+(+id)):(''+(+id)))));};
+/* 据点属性小图标：该槽 + 第几个变体 → variationIconId（42600~42610） */
+function variantIconOf(slot,varId){const sv=DATA.slots&&DATA.slots[String(slot)];
+  if(!sv||sv.length<6)return 0;return (sv[5]||[])[varId]||0;}
+/* ★ 2026-09-18：据点属性 → 是否要在图标上方写这行【文字】
+   · 有属性就写（用户要求"属性直接文字写上面"）；
+   · 但名字标签已经写出来时（名字本身就长这样：营地（火焰）），就不再写第二遍 */
+function attrTextOf(slot,varId,willLabel){
+  const t=ATTR_OF(variantIconOf(slot,varId));
+  if(!t||willLabel)return '';
+  return t;
+}
+function iconEl(id,h){const im=document.createElement('img');im.src='icons/'+icoName(id)+'.png';im.style.height=h+'px';
+  im.onerror=function(){if(this._fb){this.style.display='none';return;}this._fb=1;this.src='icons/'+ICON_FALLBACK+'.png';};return im;}
+
+/* ===================== 种子 / 组合 ===================== */
+function seedsOf(nb,rm){const out=[];for(const pid in DATA.patternFlags){
+  if(DATA.patternFlags[pid].some(r=>r[1]===nb&&r[2]===rm))out.push(+pid);}return out.sort((a,b)=>a-b);}
+function eventsOf(pid){const s=[];(DATA.patternFlags[pid]||[]).forEach(r=>{if(EVENT_CN[r[3]]&&!s.includes(EVENT_CN[r[3]]))s.push(EVENT_CN[r[3]]);});return s;}
+/* 本局「事件」是从这个组合的抽签池里抽的（不是种子写死的）—— 池行 = **这张图自己的 patternSetId**
+   ⭐ 2026-09-17 修正：原来用「夜王×10+地形」算，大空洞那批（1004/1024/1xxx）算不出池 ⇒ 改用图自己的
+   `patternSetId`（本体图 188→42、70→70 一致；大空洞图 1006→1004）⇒ 两种地形都对得上 */
+function eventPoolOf(pid){const rows=DATA.patternFlags[pid]||[];const psi=rows.length?(+rows[0][6]||0):0;
+  const row=DATA.mapPatternSet[String(psi)];if(!row)return [];
+  const out=[];(row[5]||[]).forEach(([v,w])=>{if(w>0)out.push([v,w]);});return out;}
+function eventPoolTxt(pid){const p=eventPoolOf(pid);
+  if(!p.length)return '—';
+  return p.map(([v,w])=>v?((evName(v)||('事件'+v))+' ×'+w):('无事件 ×'+w)).join(' / ');}
+const shortEv=n=>String(n).replace(/（[^）]*）/g,'');
+const evBySet=s=>(EV_BASE.find(e=>+e.set===+s)||EV_GH.find(e=>+e.set===+s)||null);
+/* 当前种子实际挂的事件（从它的抽签行读：800/801 + 事件条件组，或直接的事件值） */
+function seedEventText(pid){
+  const withDay=[], bare=[];
+  (DATA.patternFlags[pid]||[]).forEach(r=>{
+    const mod=r[3], set=r[4];
+    if(mod===800||mod===801){
+      const ev=evBySet(set);
+      withDay.push((mod===800?'第1天':'第2天')+'·'+(ev?shortEv(ev.name):'条件'+set));
+    }else{
+      const ev=EV_ALL.find(e=>+e.v===+mod);
+      if(ev)bare.push(shortEv(ev.name));
+    }
+  });
+  const wd=[...new Set(withDay)], bd=[...new Set(bare)].filter(s=>!wd.some(w=>w.endsWith('·'+s)));
+  const all=[...wd,...bd];
+  return all.length?all.join(' / '):'没有事件';
+}
+function ownersOf(pid){return (DATA.patternOwners[pid]||[]).filter((v,i,a)=>a.findIndex(x=>x[0]===v[0]&&x[1]===v[1])===i);}
+/* 「常规行」= 这个 (夜王×地形) 会被正常抽到的登记行（改它们 = 必定抽到 / 覆盖它们 = 改指向）*/
+function regularRowsOf(nb,rm){const out=[];for(const pid in DATA.patternFlags){
+  DATA.patternFlags[pid].forEach(r=>{if(r[1]===nb&&r[2]===rm&&REGULAR_MODS.includes(r[3]))out.push({pid:+pid,row:r});});}return out;}
+function seedLabel(pid){const n=(DATA.patterns[pid]||[]).length&&(DATA.patterns[pid]||[]).length;
+  const ev=eventsOf(pid);return `种子 ${pid} ｜ 据点 ${n||0} ｜ `+(ev.length?ev.join('、'):'没有事件');}
+function onCombo(){
+  const nb=+$('nightSel').value, rm=+$('rareSel').value;
+  const list=seedsOf(nb,rm), sel=$('seedSel'); sel.innerHTML='';
+  list.forEach(p=>{const o=document.createElement('option');o.value=p;o.textContent=seedLabel(p);sel.appendChild(o);});
+  if(list.length)sel.value=list[0];
+  const mk=DATA.meta.rareMap2map[rm];if(mk!==undefined)$('base').src=DATA.meta.maps[mk];
+  const reg=regularRowsOf(nb,rm);
+  $('comboHint').innerHTML=`这个组合一共有 <b>${list.length}</b> 颗种子；要测其中哪一颗，载入它后直接用 <b>地图种子锁定工具\\地图排布锁定器.bat</b> 锁号。`;
+}
+function loadSeed(){
+  const pid=+$('seedSel').value;
+  /* ⭐ 2026-09-18 用户要求：载入别的种子时，之前那张的修改【不能丢】——先把上一张存进暂存，再载入这张 */
+  if(CUR&&+CUR.pattern!==pid)msSaveCur();
+  CUR={pattern:pid,rows:(DATA.patterns[pid]||[]).map(r=>r.slice()),play:(DATA.playAreas[pid]||[]).slice()};
+  EDITS={};NEDIT={};SEDIT=null;SEL=null;SELMODE=null;PM_PICK=null;PM_NOBORROW=false;PM_MULTI=[];evResetPoints();EV_LIST=[];EV_SEL=0;EV_VALUE=null;EV_OFF=false;EV_DAY=null;EV_SPARE=false;$('sel').innerHTML='（还没点）';
+  /* 这张图以前改过 ⇒ 直接把当时改完的样子载回来（用户 2026-09-18：「再点可以加载成我们刚才修改成的样子」） */
+  if(MSTORE[pid])msApply(MSTORE[pid].snap);
+  render();fillTargets();
+}
+function seedPanel(){
+  if(!CUR||!$('seedInfo'))return;
+  const pid=CUR.pattern, fl=(DATA.patternFlags[pid]||[])[0]||[0,0,0,0,0,0,0];
+  const ev=eventsOf(pid), rows=DATA.patternFlags[pid]||[];
+  const regs=rows.filter(r=>REGULAR_MODS.includes(r[3])).length;
+  $('seedInfo').innerHTML=
+  (function(){const pv=playVal();
+    if($('n1txt'))$('n1txt').textContent=bossName(pv[5]);
+    if($('n2txt'))$('n2txt').textContent=bossName(pv[6]);return '';})()+
+    `<div class="kv"><span>夜王（出击时选他）</span><span>${NIGHT_CN[fl[1]]||('夜王'+fl[1])}</span></div>`+
+    `<div class="kv"><span>地形</span><span>${RARE_CN[fl[2]]||fl[2]}</span></div>`+
+    `<div class="kv"><span>本局事件</span><span>${seedEventText(pid)}</span></div>`+
+    `<div class="kv"><span>该组合的事件池</span><span>${eventPoolTxt(pid)}</span></div>`+
+    `<div class="kv"><span>据点数量</span><span>${CUR.rows.length} 个</span></div>`+
+    `<div class="kv"><span>它的抽签行</span><span>${rows.length} 行（其中常规 ${regs} 行）</span></div>`+
+    (Object.keys(EDITS).length||Object.keys(NEDIT).length?`<div class="kv"><span class="mod">你的改动</span><span class="mod">${Object.keys(EDITS).length} 处位置 / ${Object.keys(NEDIT).length} 个夜boss</span></div>`:'');
+}
+/* ===================== 渲染 ===================== */
+function curRows(){return CUR.rows.map((r,i)=>{const e=EDITS[i]||{};
+  return [r[0], e.ap!==undefined?e.ap:r[1], e.slot!==undefined?e.slot:r[2],
+          e.var!==undefined?e.var:r[3], e.mod!==undefined?e.mod:r[4],
+          e.mi!==undefined?e.mi:r[5]];});}
+function playVal(){const p=CUR.play.slice();
+  const d1=NEDIT[1],d2=NEDIT[2];
+  if(d1){if(d1.area!==undefined)p[1]=d1.area;if(d1.site!==undefined)p[3]=d1.site;if(d1.mod!==undefined)p[5]=d1.mod;}
+  if(d2){if(d2.area!==undefined)p[2]=d2.area;if(d2.site!==undefined)p[4]=d2.site;if(d2.mod!==undefined)p[6]=d2.mod;}
+  return p;}
+function labelOf(row){
+  const slot=row[2],mod=row[4],k=kindOf(slot);
+  const bn=mod?bname(mod):'';
+  if(row[1]===756)return '主城·楼顶boss'+(bn?'·'+bn:'');
+  if(row[1]===757)return '主城·楼底boss'+(bn?'·'+bn:'');
+  /* 山羊交易（槽 4940 + 图标 25）—— 2026-09-17 用户实测确认：
+     锁 patternId 1（槽 4940 + modifier=424）进游戏，地图上出现的就是【普通山羊交易】。
+     ⇒ 一律显示「山羊交易」，不再写"特殊事件"（它不是特殊事件）。 */
+  if(String(slot)==='4940')return (+mod===424)?'山羊交易':'槽 4940（原版空置行，不是山羊）';
+  /* 特殊事件的山羊交易 = 「夜王突袭·利普拉」（登记表事件 602 / 槽 4555「Boss Raid - Demon (Libra)」）
+     —— 2026-09-17 数据闭环：它挂 groups[213]「Encounter Setup: Libra」、**图标=0（地图上不显示）**
+     ⇒ 符合"一开始不显示、玩到事件时段才出现"；数量 23 张（普通那只 123 张）= "少很多"；
+     行名带 Demon = 交易/打过之后变战斗形态。 */
+  if(+slot===4555)return '山羊交易·特殊事件（利普拉突袭）';
+  if(bn)return ((DATA.slotKindCN&&DATA.slotKindCN[k])||'') + '·' + bn;
+  /* ★ 2026-09-18：据点统一显示「类型（属性）」（例：遗迹（毒）· 教堂（圣）· 营地（发狂）），⛔ 不再写 A/B/C/D */
+  if(isTypeSlot(slot))return slotLabel(slot,row[3]);
+  const cn=cnSlot(slot);
+  if(cn)return cn;
+  return sname(slot);
+}
+function renderFixed(layer){
+  /* ⚠️ 2026-09-17 用户纠正：山羊交易（事件商人，槽 4940）和「主城/营地/要塞旁边那种普通商人」不是一回事。
+     下面 f.mer 只管【种子里的 4940 那一行】；f.fixmer 管固定点里的 流浪商人(21)/村落商人(4)。 */
+  const f={grace:showOf('cbGrace'),hawk:showOf('cbHawk'),mer:showOf('cbMerchant'),
+           fixmer:showOf('cbFixMer'),scarab:showOf('cbScarab'),misc:showOf('cbMisc')};
+  for(const id in DATA.worldMapPoints){
+    const p=DATA.worldMapPoints[id],ic=p[1];
+    if(!ic)continue;
+    if(ic===11)continue;                 // 主城交给种子里的据点行画（能带类型名）
+    if(+id===756||+id===757)continue;
+    if(ic===25)continue;                 // 山羊交易由"种子里的那一行"画（只画一个）
+    let ok;
+    if(ic===1)ok=f.grace;
+    else if(ic===13)ok=f.hawk;
+    else if(ic===21)ok=f.fixmer;
+    else if(ic===17||ic===178)ok=f.scarab;
+    else ok=f.misc;
+    if(!ok)continue;
+    const [x,y]=posOf(+id,p[2],p[3],p[4],p[5]);
+    const d=document.createElement('div');d.className='pt';d.style.cssText+=`left:${x}px;top:${y}px`;
+    d.appendChild(iconEl(ic,ic===1?15:20));
+    if(ic!==1){const lab=document.createElement('div');lab.className='lab';lab.textContent=iname(ic);d.appendChild(lab);}
+    layer.appendChild(d);
+  }
+}
+/* 同一坐标上的多个"身份"按优先级只画一个（起始区最低；boss 最高） */
+function rowPriority(r,isStarter){
+  if(isStarter)return 10;
+  const k=kindOf(r[2]);
+  if(k==='field'||k==='basement')return 90;
+  if(k==='castle')return 85;
+  if(k==='night')return 80;
+  if(k==='evergaol')return 75;
+  if(String(r[2])==='4940')return 70;
+  if(+r[2]>=2000&&+r[2]<=2150)return 65;
+  if(+r[2]>=5000&&+r[2]<=5100)return 60;      // 湖沼 / 锻造村
+  if(k==='horde')return 5;
+  /* ★ 2026-09-18：小营地/小屋/车队 这批槽游戏不给地图图标（组图标=0）⇒ 同一坐标上让位给有图标的据点 */
+  if(isCampSlot(r[2]))return 40;
+  return 50;
+}
+function render(){
+  const layer=$('layer');if(!layer)return;layer.innerHTML='';
+  if(!CUR)return;
+  renderFixed(layer);
+  const rows=curRows(),pl=playVal();
+  // 左上角固定信息条（夜王 / 地形 / 事件 / 种子号）
+  const mi=$('mapinfo');
+  if(mi){const fl0=(DATA.patternFlags[CUR.pattern]||[])[0]||[0,0,0,0,0,0,0];const ev0=eventsOf(CUR.pattern);
+    mi.innerHTML=`<div><span class="k">夜王</span><b>${cnNight(fl0[1])}</b></div>`+
+      `<div><span class="k">地形</span><b>${cnRare(fl0[2])}</b></div>`+
+      `<div><span class="k">本局事件</span><b>${seedEventText(CUR.pattern)}</b></div>`+
+      `<div><span class="k">种子号</span><b>${CUR.pattern}</b></div>`;}
+  // 夜战缩圈：雾圈用游戏原图标；圈上直接写这一夜打谁；点圈可换位置
+  if(showOf('cbSeg'))[1,2].forEach(day=>{
+    /* ★ 这一夜真正打谁 = bossId{day}（场地槽）→ 译成 boss 编号 → 取名（2026-09-17 修）
+       ⛔ 以前这里查 bossModifier（原版旧值、不随图变）⇒ MMV 改了夜 boss 也照旧显示原版名 */
+    const area=pl[day],bn0=bossNameOfSlot(pl[2+day]);
+    const c=DATA.pos&&DATA.pos[area];if(!c)return;
+    const [x,y]=c,D0=88;
+    const cir=document.createElement('img');cir.className='zcircle';
+    cir.src='icons/MENU_MAP_CircleMist_'+day+'.png';
+    cir.style.cssText+=`left:${x-D0/2}px;top:${y-D0/2}px;width:${D0}px;height:${D0}px`;
+    layer.appendChild(cir);
+    if(day===2){const mk=document.createElement('img');mk.className='zcircle';
+      mk.src='icons/MENU_MAP_80.png';mk.style.cssText+=`left:${x-15}px;top:${y-15}px;width:30px;height:30px;z-index:6`;
+      layer.appendChild(mk);}
+    const hit=document.createElement('div');
+    hit.className='zonehit'+(day===2?' d2':'')+((SELMODE==='pa'+day)?' pick':'');
+    hit.style.cssText+=`left:${x-D0/2}px;top:${y-D0/2}px;width:${D0}px;height:${D0}px`;
+    hit.title='点这里换这一夜的缩圈位置';
+    hit.onclick=()=>{SELMODE='pa'+day;SEL=day;render();showPA(day);};
+    layer.appendChild(hit);
+    const t=document.createElement('div');t.className='ztitle'+(day===2?' d2':'');
+    t.style.cssText+=`left:${x}px;top:${y-D0/2-16}px`;t.textContent=`第${day}夜boss·${bn0}`;
+    layer.appendChild(t);
+    const pn=document.createElement('div');pn.className='ztitle'+(day===2?' d2':'');
+    pn.style.cssText+=`left:${x}px;top:${y+D0/2+14}px;font-size:13px;font-weight:400`;
+    pn.textContent=((DATA.playAreaCN&&DATA.playAreaCN[area])||('位置 '+area));layer.appendChild(pn);
+  });
+  const allName=$('cbAllName')&&$('cbAllName').checked;
+  const showName=showOf('cbName'), showHorde=showOf('cbHorde'), showMer=showOf('cbMerchant');
+  const showStarter=showOf('cbStarter');
+  /* ⚠️ 同一坐标可能有 1~4 个"身份"（普通据点 / 起始区出生点 / DLC 落点）→ 只画最重要的那个，
+     其余在标签里注明"同位置还有"。起始区默认不画（它是出生点，不是要打的据点）。 */
+  const groups={};const starterRows=[];let ghostN=0;
+  rows.forEach((r,i)=>{
+    const ap=DATA.attachPoints[r[1]];if(!ap)return;
+    if(isStarterAtt(r[1]))starterRows.push({r:r,i:i});   /* 起始区那两行【也照常参与据点绘制】——
+         ⚠️ 2026-09-18 修 bug：以前这里 `return`（整行踢掉），结果挂在"起始区大据点"落点上的
+         火焰教堂(3810@126) 被丢掉、只剩小营地在画（用户报"你把教堂和小营地搞混了"）。*/
+    const k=kindOf(r[2]);
+    if(k==='horde'&&!showHorde)return;
+    if(String(r[2])==='4940'){
+      if(!showMer)return;
+      if(+r[4]===0)return;      /* ⭐ 用户 2026-09-17：modifier=0 的那行【不是山羊】，地图上不画它 */
+    }
+    if(r[1]===756||r[1]===757)return;
+    const [x,y]=posOf(r[1],ap[1],ap[2],ap[3],ap[4]);
+    /* ★ 同一坐标的判定用 8px 容差：几个像素挨在一起的（例：小营地+火焰教堂）合并成一个点，
+       只画优先级最高的那个 ⇒ 不会再出现"小营地压住火焰教堂" */
+    const pkey=Math.round(x/8)+','+Math.round(y/8);
+    (groups[pkey]=groups[pkey]||[]).push({r:r,i:i,x:x,y:y,st:false,pr:rowPriority(r,false)});
+  });
+  /* ⛔ 2026-09-17 实测结论：这里**不再生成"追加行"CSV** —— 往这张表末尾加新行，游戏完全不认
+     （用户实测：干净底子 + 只追加一行 ⇒ 编辑器显示正常、进游戏没有；而**改现有行**立刻生效）。
+     ⇒ ⑦ 现在走的是"腾一行出来替换"，改动已经包含在上面那份**覆盖导入**的据点表 CSV 里。 */
+  Object.keys(groups).forEach(pkey=>{
+    const g=groups[pkey].slice().sort((a,b)=>b.pr-a.pr);
+    const M=g[0],r=M.r,i=M.i,x=M.x,y=M.y;
+    const others=g.slice(1).map(o=>labelOf(o.r));
+    /* ⭐⭐ 2026-09-18 用户要求（原话：「你就不可以让上面的虚化显示吗，位置相近的那些」）
+       ⇒ 同一位置被压住的那些身份**不再"直接不画"**（以前只在名字里写"同位置还有"），改成虚化画出来：
+         半透明 + 小一号 + 往左下错开，免得被上面那个盖死；照样能点（点它 = 选中那一行）。 */
+    g.slice(1).forEach((o,oi)=>{
+      const gr=o.r, gk=kindOf(gr[2]);
+      const gic=(gk==='castle')?11:((TYPE_ICON_FIX[String(gr[2])]!==undefined)?TYPE_ICON_FIX[String(gr[2])]:iconOfSlotF(gr[2]));
+      const gvi=variantIconOf(gr[2],gr[3]);
+      const gh=gk==='castle'?30:((gic||gvi)?18:13);
+      const gx=x-22-oi*18, gy=y+18+oi*14;
+      const gd=document.createElement('div');gd.className='ghostP';
+      gd.style.cssText+=`left:${gx}px;top:${gy}px`;
+      gd.title='同一位置还有：'+labelOf(gr)+'（原来被压住、看不见；点它 = 选中这一行）';
+      if(NO_ICON_SLOTS.indexOf(String(gr[2]))<0)gd.appendChild(iconEl(gic||gvi||'Spot_00',gh));
+      const gl=document.createElement('div');gl.className='glab';gl.textContent=labelOf(gr);
+      gd.appendChild(gl);
+      gd.onclick=()=>{SELMODE='row';SEL=o.i;render();showRow(o.i,curRows()[o.i]);};
+      layer.appendChild(gd);ghostN++;
+    });
+    const k=kindOf(r[2]);
+    const isCastle=(k==='castle');
+    /* ⭐ 2026-09-18 用户要求：带属性的据点改成【纯类型图标 + 属性文字】，⛔ 不再叠属性小图标角标
+       （旧画法 = 主图标 + 右下角 16px 属性角标；没类型图标的还拿属性图标当主图标
+         ⇒ 看起来像"营地和遗迹重一起"。用户原话：「营地就用纯营地图标，属性直接文字写上面，
+            包括毒池，锻造村也是」。要塞(3000/3030)图标不变。） */
+    /* ★ 据点（用户定稿：类型图标 + 属性文字）
+       ⛔ 粪坑/锻造村 在游戏里**没有图标素材**（2026-09-18 全库查证）⇒ 直接写文字，不画图标 */
+    const noIcon=(NO_ICON_SLOTS.indexOf(String(r[2]))>=0);
+    const ic=isCastle?11:((TYPE_ICON_FIX[String(r[2])]!==undefined)?TYPE_ICON_FIX[String(r[2])]:iconOfSlotF(r[2]));
+    const d=document.createElement('div');d.className='pt'+((SELMODE==='row'&&SEL===i)?' sel':'');
+    d.style.cssText+=`left:${x}px;top:${y}px`;
+    const wrap=document.createElement('div');wrap.style.cssText='position:relative;display:inline-block';
+    const vi=variantIconOf(r[2],r[3]);
+    const important=(k==='field'||k==='basement'||k==='castle'||k==='evergaol'||k==='horde'
+                     ||String(r[2])==='4940'||+r[2]===4555          // 山羊交易两种 / 夜王突袭地：名字必显
+                     ||(+r[2]>=2000&&+r[2]<=2150)||(r[4]&&nameDyn(+r[4])));
+    const willLabel=showName&&(allName||important);
+    const attrTxt=attrTextOf(r[2],r[3],willLabel);   /* 属性 → 文字（名字标签没显示时才写在图标上方） */
+    const isMer=(String(r[2])==='4940');       // 山羊交易：画大一点（用户 2026-09-17）
+    const hMain=isCastle?44:(isMer?30:((ic||vi)?22:16));
+    if(noIcon){
+      if(isCampSlot(r[2])){                 // ★ 小营地/小屋/车队：只画很小很暗的字，不占地方、不盖住别人
+        const t=document.createElement('div');t.className='campTxt';t.textContent=slotLabel(r[2],r[3]);
+        wrap.appendChild(t);
+      }else{
+        const t=document.createElement('div');t.className='slotTxt';t.textContent=slotLabel(r[2],r[3]);
+        wrap.appendChild(t);
+      }
+    }else if(ic)wrap.appendChild(iconEl(ic,hMain));             // ① 有据点类型图标 → 用它当主图标
+    else if(vi)wrap.appendChild(iconEl(vi,hMain));              // ② 没有类型图标的（原样保留）
+    else wrap.appendChild(iconEl('Spot_00',hMain));
+    /* ⛔ 属性不再是图标角标，是【文字】写图标上方；
+       ⭐ 但如果名字标签已经写出来了（名字里就是「类型（属性）」），就不重复写第二遍
+       ⭐ 文字型据点（粪坑/锻造村）本身已经把"类型（属性）"写出来了 ⇒ 不再重复 */
+    if(attrTxt&&!noIcon){const a=document.createElement('div');a.className='attr';a.textContent=attrTxt;
+      a.style.color=(ATTR_COLOR[vi]||'#fff');wrap.appendChild(a);}
+    d.appendChild(wrap);
+    if(willLabel){const lab=document.createElement('div');lab.className='lab';
+      const t=isCastle?('主城·'+(CASTLE_CN[r[2]]||'?')):labelOf(r);
+      lab.textContent=t+(others.length?('（同位置还有：'+others.join('、')+'）'):'');d.appendChild(lab);}
+    d.onclick=()=>{SELMODE='row';SEL=i;render();showRow(i,curRows()[i]);};
+    layer.appendChild(d);
+  });
+  /* ===== 出生点：只画【一个】，图标用游戏图标 MENU_MAP_151；点它 → 从原版这 9 个出生点里换 =====
+     ⭐ 落地点 = "次"那一行（= 这张图的起始区）：原版这两行同属一个起始区，
+        而"次"那行的地块和出生点表完全对齐（9/9），"主"那行只在一部分图里对齐 ⇒ 画在"次"那一行上。 */
+  if(showStarter && starterRows.length){
+    const maj=starterRows.find(s=>!isStarterMajor(s.r[1]))||starterRows[0];
+    const ap=DATA.attachPoints[maj.r[1]];
+    if(ap){
+      const [x,y]=posOf(maj.r[1],ap[1],ap[2],ap[3],ap[4]);
+      const d=document.createElement('div');
+      d.className='spawn'+((SELMODE==='spawn')?' sel':'');
+      d.style.cssText+=`left:${x}px;top:${y}px`;
+      d.title='出生点：'+starterCN(maj.r[1])+'（点我从原版这 9 个出生点里换）';
+      const im=document.createElement('img');
+      im.src='icons/MENU_MAP_151.png';im.style.height='30px';
+      im.onerror=function(){if(this._f)return;this._f=1;this.src='icons/MENU_MAP_01_Bonfire.png';};
+      d.appendChild(im);
+      d.onclick=()=>{SELMODE='spawn';SEL=maj.i;render();showSpawn();};
+      layer.appendChild(d);
+      const t=document.createElement('div');t.className='ztitle';
+      t.style.cssText+=`left:${x}px;top:${y-28}px;font-size:16px;color:#ffd24a`;
+      t.textContent='出生点';
+      layer.appendChild(t);
+    }
+  }
+  /* ===== 事件点位：只在"正在编辑某个事件"时才画（⛔ 不把几十个候选点铺成图标）=====
+     选中的点高亮；候选点画成小圆点即可（不是图标），点一下就能加/取消 */
+  if(CUR&&evCurValue()){
+    const v=evCurValue(),kd=evKind(v);
+    const put=(x,y,on,title,fn)=>{const d=document.createElement('div');
+      d.className='evdot'+(on?' on':'');d.style.cssText+=`left:${x}px;top:${y}px`;
+      d.title=title;if(fn)d.onclick=fn;layer.appendChild(d);};
+    if(kd==='swap'){
+      evSwapTargets(CUR.pattern,v).forEach(t=>{
+        const ap=DATA.attachPoints[t.attach];if(!ap)return;
+        const [x,y]=posOf(t.attach,ap[1],ap[2],ap[3],ap[4]);
+        put(x,y,EV_SWAP[t.i]!==undefined,
+            '点我把这里换成'+(+v===230?'古老魔法师塔':'这个事件的内容'),()=>evSwapToggle(t.i,t.slot));});
+    }else if(kd==='place'){
+      const pts=evPlacePoints(v),sel=(EV_PLACE.length?EV_PLACE:pts.slice(0,1));
+      pts.forEach(a=>{const ap=DATA.attachPoints[a];if(!ap)return;
+        const [x,y]=posOf(a,ap[1],ap[2],ap[3],ap[4]);const on=sel.includes(+a);
+        put(x,y,on,(on?'✓ 已选：':'点一下选中：')+(attCN(a)||('点位 '+a)),()=>evPlaceToggle(a));});
+    }
+  }
+  if(mi&&ghostN)mi.innerHTML+='<div><span class="k">虚化</span><b>同一位置叠着 '+ghostN+' 个（半透明的那些，能点开）</b></div>';
+  seedPanel();
+  showPlainMer();
+  showEvents();
+  msSaveCur();                     /* ⑨ 每改一下自动存住（换种子 / 刷新页面都不丢） */
+  showModBox();
+}
+/* ===================== ⑦ 普通山羊交易（2026-09-17 晚 重做）=====================
+   ⭐⭐ 实测结论（用户 2026-09-17 进游戏验证，铁证）：
+     · **改现有的行 = 生效**（位置能挪、槽能换、modifier 能改）；
+     · **往表末尾追加新行 = 游戏完全不理**（编辑器里显示正常、进游戏没有）。
+       证据：干净底子 + 只追加一行的 bin 也一样；那一行与能生效的原版行逐字段一致，
+       文件结构也和 MMV 追加的 80 行完全相同。⇒ 旧版走"新增行 + Append CSV"的路是死的。
+   ⇒ 所以「给本来没有山羊交易的图加一只」只能走【腾一行出来、把它改造成山羊交易】这条路（用户实测通过 ✓）。
+   山羊交易行 = 槽 4940 + modifier 424（PATTERN_MODIFIER 里 424 = "Event - Scale-bearing Merchant (Libra)"）。
+*/
+const PLAIN_MER_SLOT='4940';
+/* ⭐⭐ 用户 2026-09-18 定版口径（原话）：「玩家要修改的是地图上会放在什么位置，玩家只改显示在哪里位置。
+   然后你编辑器改的时候用这些不会有影响的行，而不是显示玩家点一堆夜潮」
+   ⇒ 界面只出现【位置】（山羊自己的专属点位 710~718 那套）；"借一行"一律由工具在背后做，
+     ⛔ 不再把"借哪一行"的清单摆给用户挑（旧版那样做就是错的）。 */
+let PM_PICK=null;        // 工具在背后借出来放山羊的那一行（界面上只说"借了一条看不见的行"）
+let PM_NOBORROW=false;   // 这张图连"看不见的点位行"都没有 ⇒ 放不了山羊（面板说明原因，不偷偷顶据点）
+const pmRare=()=>+((($('rareSel')||{}).value)||0);
+const pmPositions=()=>{const b=((DATA.positionsByRare||{})[String(pmRare())])||{};return (b[PLAIN_MER_SLOT]||[]).map(Number);};
+function plainMerRowIdx(){
+  const rows=curRows();
+  for(let i=0;i<rows.length;i++){
+    const m=(EDITS[i]&&EDITS[i].mod!==undefined)?EDITS[i].mod:rows[i][4];
+    if(String(rows[i][2])===PLAIN_MER_SLOT && (+m===424))return i;   /* 只有 modifier=424 才算山羊交易 */
+  }
+  return -1;
+}
+const plainMerHas=()=>plainMerRowIdx()>=0;
+function plainMerCurAttach(){
+  const i=plainMerRowIdx();
+  if(i>=0){const e=EDITS[i]||{};return e.ap!==undefined?e.ap:curRows()[i][1];}
+  return null;
+}
+/* 谁能被"借出来"（⛔⛔ 2026-09-18 晚 重写 —— 用户原话：「普通山羊的点位也是特殊的专门位置…
+   而不是用别人的位置，比如营地之类的」＋「要借的话用那种看不见的行去借」）：
+   · 山羊有**它自己的专属点位**（本体 710~718 `Event - Scale-bearing Merchant, <方位>`；
+     DLC 2710~2718；大空洞 1170~1176）⇒ 借来的那一行会**搬到山羊的专属位置上**，绝不占营地的位置；
+   · 旧版这里按 `kind=base/large` 筛 ⇒ 候选**全是看得见的据点/营地**（隐形事件行反被排除）＝就是那个 bug；
+   · 现在与 `evFreeRows()` 同一套护栏：⛔ 不动你改过的行 / 出生点那两行 / 山羊交易行；
+     默认**只借"玩家看不见的事件点位行"**（夜潮出怪点优先），"看得见的据点"只有显式勾开关才出现。 */
+function pmReplaceCandidates(){
+  const out=[],rows=curRows(),info=starterRowsInfo(),skip=new Set();
+  if(info.major)skip.add(info.major.i);
+  if(info.minor)skip.add(info.minor.i);
+  const nmOf=a=>String((DATA.attachPoints[a]||[''])[0]);
+  rows.forEach((r,i)=>{
+    if(skip.has(i))return;
+    if(String(r[2])===PLAIN_MER_SLOT)return;
+    if(EDITS[i]!==undefined)return;                     /* ⛔ 你本次改过的行不动 */
+    if(isStarterAtt(r[1]))return;                       /* ⛔ 出生点那两行不动 */
+    if(!DATA.attachPoints[r[1]])return;
+    const nm=nmOf(r[1]),invis=(nm.indexOf('Event')===0||nm.indexOf('Night Horde')===0);
+    if(invis){out.push({i:i,row:r,invis:true});return;}
+    if(!STEAL_VISIBLE)return;                           /* 默认不碰看得见的据点 */
+    const k=kindOf(r[2]);
+    if(k!=='base'&&k!=='large')return;
+    out.push({i:i,row:r,invis:false});
+  });
+  out.sort((a,b)=>(a.invis?0:1)-(b.invis?0:1)||(a.i-b.i));
+  return out;
+}
+/* ⭐ 普通山羊交易【多点位】（用户 2026-09-18：允许多选、出现多个山羊；玩家刚进去默认只有一个）——
+   每多选一个位置就用这张图现有的一行腾出来改成山羊交易（4940 + modifier 424），⛔ 不新增行 */
+let PM_MULTI=[];
+function pmMultiApply(){
+  Object.keys(EDITS).forEach(k=>{if(EDITS[k]&&EDITS[k].pmer)delete EDITS[k];});
+  const info=[];if(!PM_MULTI.length)return info;
+  const rows=curRows(),used=[];
+  const base=(PM_PICK!==null?PM_PICK:plainMerRowIdx());
+  PM_MULTI.forEach((a,j)=>{
+    let i=(j===0&&base>=0)?base:undefined;
+    if(i===undefined)i=evFreeRows(CUR.pattern,1,used.concat(base>=0?[base]:[]))[0];
+    if(i===undefined)return;used.push(i);
+    const was=labelOf(rows[i]);
+    EDITS[i]=Object.assign({},EDITS[i],{pmer:true,ap:+a,slot:+PLAIN_MER_SLOT,var:0,mod:424,mi:j});
+    info.push([was,labelOf(curRows()[i])+'（山羊交易）']);
+  });
+  if(used.length<PM_MULTI.length)info.push(['—','⚠ 可腾的行不够：只放了 '+used.length+' 只'+
+    (STEAL_VISIBLE?'（连"看得见的据点"也算上还是不够）':'（这张图没有"看不见的事件点位行"了 —— 要顶掉看得见的据点，请勾上面那个选项）')]);
+  return info;
+}
+function pmMultiToggle(a){const k=PM_MULTI.indexOf(+a);if(k>=0)PM_MULTI.splice(k,1);else PM_MULTI.push(+a);
+  pmMultiApply();render();showPlainMer();}
+function pmMultiClear(){PM_MULTI=[];pmMultiApply();render();showPlainMer();}
+function showPlainMer(){
+  const box=$('plainMerBox');if(!box)return;
+  if(!CUR){box.innerHTML='（还没载入种子）';return;}
+  const rows=curRows(),idx=plainMerRowIdx(),has=plainMerHas(),cur=plainMerCurAttach(),pmPos=pmPositions();
+  let h='';
+  h+='<label style="display:flex;gap:8px;align-items:center;background:#131722;border:1px solid var(--line);border-radius:6px;padding:6px 8px">'+
+    '<input type="checkbox" style="width:auto" '+(has?'checked':'')+' onchange="togglePlainMer(this.checked)">'+
+    '<span>这张图<b>'+(has?'有':'没有')+'</b>普通山羊交易</span></label>';
+  h+='<div class="hint">⭐ <b>勾选 = 有</b>（会出现，下面可接着换位置）　<b>不勾 = 没有</b></div>';
+  if(has){
+    const isRep=(PM_PICK!==null);
+    h+='<h3>放哪个位置（点一下就换）</h3>';
+    h+=pmPos.length?pmPos.map(a=>'<div class="cand'+(String(a)===String(cur)?' sel':'')+'" onclick="setPlainMerPos('+a+')">'+
+        '<span>'+attCN(a)+'</span><small>'+(String(a)===String(cur)?'就在这儿':'挪到这儿')+'</small></div>').join('')
+      :'<div class="hint mod">这个地形原版没给可用位置</div>';
+    h+='<div class="hint">上面是<b>山羊交易自己的专属点位</b>（原版只在这几个点上放山羊，营地/据点那种位置不会放）。</div>';
+    h+=isRep?('<div class="hint">这张图原本没有山羊交易 ⇒ 我在<b>背后借了一条"玩家看不见的点位行"</b>'+
+              '（'+attCN(rows[idx][1])+'，原来放的是 '+labelOf(CUR.rows[PM_PICK])+'）来放它。</div>'+
+              '<div class="row"><button onclick="undoReplaceMer()">取消这只山羊（把借的那一行还回去）</button></div>')
+            :('<div class="hint">（原版本来就有这一行）</div>'+
+              '<div class="row"><button onclick="clearMerchantRow()">这里不放山羊交易（把 424 事件标清掉）</button></div>');
+    /* ⭐ 多点位（用户 2026-09-18）：想放几只就点几个位置（默认还是那 1 只） */
+    const mi=pmMultiApply();
+    h+='<h3>放多只（可多选、不限数量）</h3>';
+    h+='<div class="hint">点一个位置 = <b>多放一只</b>（工具在背后借"看不见的点位行"来放）；再点一次取消。已多放 <b>'+PM_MULTI.length+'</b> 只'+
+       (PM_MULTI.length?'':'（<span class="mod">不选就还是上面那 1 只</span>）')+'。'+
+       '⚠ 游戏里刚进去默认还是只看到一只，其余的要等事件/时段。</div>';
+    h+='<div class="hint">背后只会借<b>"玩家看不见的点位行"</b>（夜潮出怪点那种，借了没代价）；'+
+       '<span class="mod">你自己刚改过的行、出生点那两行绝不会动</span>。</div>';
+    h+='<label style="display:flex;gap:8px;align-items:center;background:#131722;border:1px solid var(--line);border-radius:6px;padding:6px 8px">'+
+       '<input type="checkbox" style="width:auto" '+(STEAL_VISIBLE?'checked':'')+' onchange="setStealVisible(this.checked)">'+
+       '<span>⚠ 允许<b>顶掉玩家看得见的据点</b>来腾位置（默认关）</span></label>';
+    h+=pmPos.map(a=>'<div class="cand'+(PM_MULTI.includes(+a)?' sel':'')+'" onclick="pmMultiToggle('+a+')">'+
+        '<span>'+attCN(a)+'</span><small>'+(PM_MULTI.includes(+a)?'✓ 已加一只':'加一只在这儿')+'</small></div>').join('');
+    if(mi.length)h+='<div class="hint">会顶掉：'+mi.map(x=>x[0]).join('、')+'</div>';
+    if(PM_MULTI.length)h+='<div class="row"><button onclick="pmMultiClear()">取消多放的山羊</button></div>';
+    box.innerHTML=h;return;
+  }
+  if(PM_NOBORROW){
+    h+='<div class="hint mod">这张图<b>放不了山羊交易</b>：它没有可借的"玩家看不见的点位行"（夜潮/突袭那种出怪点），'+
+       '而按你的口径默认<b>不去顶看得见的据点</b>。</div>';
+    h+='<label style="display:flex;gap:8px;align-items:center;background:#131722;border:1px solid var(--line);border-radius:6px;padding:6px 8px">'+
+       '<input type="checkbox" style="width:auto" '+(STEAL_VISIBLE?'checked':'')+' onchange="setStealVisible(this.checked)">'+
+       '<span>⚠ 允许<b>顶掉玩家看得见的据点</b>来放它（默认关）</span></label>';
+    box.innerHTML=h;return;
+  }
+  h+='<div class="hint">这张图原本没有山羊交易。勾上以后，山羊会出现在它<b>自己的专属点位上</b>'+
+     '（勾上后下面就能点位置换）；工具会在背后借一条"玩家看不见的点位行"来放它'+
+     '（游戏只认原本那些行，加新行不生效）。</div>';
+  box.innerHTML=h;
+}
+function togglePlainMer(on){
+  const idx=plainMerRowIdx();
+  if(on){
+    if(idx<0){
+      /* 这张图原本没有山羊行 ⇒ 工具自己在背后借一行（⛔ 不摆清单给用户挑） */
+      const c=pmReplaceCandidates();
+      if(c.length)pickReplaceMer(c[0].i); else PM_NOBORROW=true;
+    }
+  }else{
+    PM_NOBORROW=false;
+    if(PM_PICK!==null){delete EDITS[PM_PICK];PM_PICK=null;}   // 我们腾出来的 → 还原那一行
+    else if(idx>=0)EDITS[idx]=Object.assign({},EDITS[idx],{mod:0});  // 原版那行 → 把 424 事件标清掉
+  }
+  render();showPlainMer();
+}
+function pickReplaceMer(i){
+  PM_PICK=i;PM_NOBORROW=false;
+  const ps=pmPositions(),a=ps.length?ps[0]:710;
+  EDITS[i]=Object.assign({},EDITS[i],{ap:+a,slot:+PLAIN_MER_SLOT,var:0,mod:424,mi:0});
+  render();showPlainMer();
+}
+function undoReplaceMer(){
+  if(PM_PICK!==null){delete EDITS[PM_PICK];PM_PICK=null;}
+  render();showPlainMer();
+}
+function clearMerchantRow(){
+  const idx=plainMerRowIdx();
+  if(idx>=0)EDITS[idx]=Object.assign({},EDITS[idx],{mod:0});
+  render();showPlainMer();
+}
+function setPlainMerPos(a){
+  const idx=plainMerRowIdx();
+  if(idx>=0)EDITS[idx]=Object.assign({},EDITS[idx],{ap:+a,slot:+PLAIN_MER_SLOT,mod:424});
+  else if(PM_PICK!==null)EDITS[PM_PICK]=Object.assign({},EDITS[PM_PICK],{ap:+a,slot:+PLAIN_MER_SLOT,var:0,mod:424,mi:0});
+  render();showPlainMer();
+}
+/* ===================== ⑧ 特殊事件（2026-09-17 晚 重做）=====================
+   写法（原版 520 张图全量反推 + 用户 A/B 实测，见 skill §13）：
+     · 「有没有事件 / 是哪个」= 登记表 LotResultMapPatternFlag 里 modifierSet=0、modifier=<事件值> 的那一行
+       这一行的 eventFlag **也跟事件绑定**（实测规律）：普通事件=0；
+       夜王突袭 604→8075 / 603→8076 / 600→8077 / 601→8078 / 602→8079 / 10000→8080 / 10001→8081
+     · 「第几天」= modifierSet=<事件组号>、modifier=800(第1天)/801(第2天) 的那一行
+       这一行的 eventFlag = 7700+偏移（第1天）/ 7720+偏移（第2天）
+       偏移（全量实测）：额外夜boss 0 · 陨石 1 · 灵庙 2 · 夜潮 4 · 五种夜王突袭 5 · 古老魔法师塔 6 · 疯狂之塔 7
+     · 事件组号（modifierSet）：**本体 = 3000~3130**；**大空洞（DLC）= 505~560**（另一套，用户要求分开显示；大空洞本次不做）
+   ⛔⛔ 铁律（⑦ 山羊交易实测）：**改现有行 = 生效；往表末尾追加新行游戏不认** ⇒ 不再产出任何 Append 的 CSV
+     · 有声明行的图（248 张）：改「声明行 + 第几天行」两处 → 一份【覆盖导入】的 CSV
+     · 原本没有事件的图（268 张）：用它的「全 0 空行」**腾出来**写事件声明（照 ⑦ 的范式）；
+       这类图没有「第几天」行可改 ⇒ 指定不了第几天（本工具不新增行）
+*/
+/* 两套事件分开列（用户 2026-09-17：「大空洞这个 dlc 的事件要和别的分开」）——
+   ⛔ 不再按值合并成一个表（旧版把大空洞那套折叠成一个小标签，看不出来是两套东西） */
+const EV_FAM=(()=>{
+  const mk=(arr,gh,label,tip)=>{const seen=new Set(),items=[];
+    (arr||[]).forEach(e=>{const v=+e.v;if(v===14000)return;if(seen.has(v))return;seen.add(v);
+      items.push({v:v,name:String(e.name).replace(/（大空洞）/g,''),set:+e.set||0,raid:!!e.raid,gh:gh});});
+    return {label:label,tip:tip,gh:gh,items:items};};
+  return [mk(DATA.eventOptions,false,'本体事件',''),
+          mk(DATA.eventOptionsGH,true,'大空洞（DLC）事件',
+             '另一套组号 505~560，跟大空洞地形绑定；大空洞我们暂不做 ⇒ 单独列在这里、不可点')];
+})();
+const EV_BASE=EV_FAM[0].items, EV_GH=EV_FAM[1].items;
+const EV_ALL=EV_BASE.concat(EV_GH);
+const EV_VALUES=new Set(EV_ALL.map(e=>e.v));
+const evName=v=>{const e=EV_ALL.find(x=>x.v===v);return e?e.name:('事件'+v);};
+const evShort=v=>String(evName(v)).replace(/（[^）]*）/g,'');
+const evSetOf=(v,gh)=>{const it=(gh?EV_GH:EV_BASE).find(x=>x.v===v);return it?it.set:0;};
+/* 事件值→声明行事件标志 / 组号→第几天行偏移 k：**全部从当前 bin 的原版数据反推**（不写死，换 bin 跟得上） */
+const EV_META=(()=>{
+  const cnt=(o,k,v)=>{o[k]=o[k]||{};o[k][v]=(o[k][v]||0)+1;};
+  const df={},sk={};
+  for(const pid in DATA.patternFlags)for(const r of (DATA.patternFlags[pid]||[])){
+    const mod=+r[3],ms=+r[4],fl=+r[5];
+    if(ms===0&&EV_VALUES.has(mod))cnt(df,mod,fl);
+    if(ms>500&&(mod===800||mod===801))cnt(sk,ms,fl-((mod===800)?7700:7720));
+  }
+  const top=o=>{let b=0,n=-1;for(const k in o)if(o[k]>n){n=o[k];b=+k;}return b;};
+  const D={decl:{},setK:{}};
+  for(const v in df)D.decl[v]=top(df[v]);
+  for(const s in sk)D.setK[s]=top(sk[s]);
+  return D;})();
+const evDeclFlag=v=>(EV_META.decl[v]!==undefined?EV_META.decl[v]:0);
+const kOfDayRow=r=>Math.max(0,(+r[5])-((+r[3]===800)?7700:7720));
+const dayFlagFor=(set,day,keepK)=>{const k=(EV_META.setK[set]!==undefined?EV_META.setK[set]:keepK);
+  return ((+day===800)?7700:7720)+k;};
+/* ===== 每个事件的「占位规格」（2026-09-18 实测：每种事件一套自己的方法，⛔ 不套同一个模板）=====
+   swap（换据点位置型）：把某个「据点位置」**就地**换成该事件的内容槽
+     · 200 陨石 / 210 灵庙 → 槽 = 「大据点·<地名>」（槽号与落点一一对应，见 BIG_SLOT）
+     · 230 古老魔法师塔   → 槽 = 4090（占小据点/魔法师塔那个位置）
+   place（专属不可见点位型）：用该事件自己的点位，**每个点占一行**（行从别处腾）
+     · 180 夜潮 → 4600~4606 @ 615~662 ｜ 4940 山羊 → 710~718
+     · 604 玛尔基特→4678 · 603 玛利斯→4552 · 601 格诺斯塔→4553 · 602 利普拉→4555
+     · 600 格拉狄乌斯→5300 · 10000 卡莉果→5305
+   ignite（点火型）：140 癫火塔 → 登记表加一行 set=3500 + 旗标（上塔/下塔）
+   extra（夜boss型）：120 额外夜boss → 写在夜boss表 extraBossId1/2
+   none（无点位型）：10001 哈尔莫尼亚 → 只写声明 + 天数
+*/
+const BIG_SLOT={100:2010,101:2000,103:2030,104:2040,106:2050,107:2060,108:2070,109:2080,110:2100,
+                111:2090,112:2110,113:2120,114:2130,116:2140,117:2150,120:2020};
+const EV_SLOT={604:4678,603:4552,601:4553,602:4555,600:5300,10000:5305,4940:4940};
+const EV_KIND={200:'swap',210:'swap',230:'swap',140:'ignite',120:'extra',10001:'none',
+               180:'place',600:'place',601:'place',602:'place',603:'place',604:'place',10000:'place',4940:'place'};
+const IGNITE_TOWER={up:1044360220,down:1044380230};
+const evKind=v=>EV_KIND[+v]||'none';
+const evSlotOf=v=>(+v===180)?4600:EV_SLOT[+v];
+const pfRows=pid=>DATA.patternFlags[pid]||[];
+const evDeclRow=pid=>{const rows=pfRows(pid);
+  for(let i=0;i<rows.length;i++){const r=rows[i];if(+r[4]===0&&EV_VALUES.has(+r[3]))return {idx:i,row:r};}
+  return null;};
+const evDayRow=pid=>{const rows=pfRows(pid);
+  for(let i=0;i<rows.length;i++){const r=rows[i];if(+r[4]!==0&&(+r[3]===800||+r[3]===801))return {idx:i,row:r};}
+  return null;};
+/* 这张图「全 0 的那一行」—— 原版 520 张里，没有事件的那 268 张【每张恰好一个】⇒ 腾它写事件 */
+const evSpareRow=pid=>{const rows=pfRows(pid);
+  for(let i=0;i<rows.length;i++){const r=rows[i];if(+r[3]===0&&+r[4]===0&&+r[5]===0)return {idx:i,row:r};}
+  return null;};
+const pidRare=pid=>{const rows=pfRows(pid);return rows.length?+rows[0][2]:0;};
+/* 某事件的「专属点位集合」：从当前 bin 里所有图、用到该事件槽的那些行的落点推出来（数据驱动，换 bin 跟得上） */
+const EV_POINTS=(()=>{const m={};
+  for(const pid in DATA.patterns)for(const r of DATA.patterns[pid]){
+    const s=+r[2];let v=null;
+    if(s>=4600&&s<=4606)v='180';
+    else for(const k in EV_SLOT)if(EV_SLOT[k]===s)v=k;
+    if(v)(m[v]=m[v]||new Set()).add(+r[1]);}
+  const o={};for(const k in m)o[k]=Array.from(m[k]).sort((a,b)=>a-b);return o;})();
+const evPlacePoints=v=>EV_POINTS[String(v)]||[];
+/* 把「事件点位」的改动写进 EDITS（据点表那份 CSV 就是 curRows()）——
+   swap 型：就地把那一行的槽换掉（落点不动）；place 型：腾 n 行、改成（落点, 事件槽）
+   返回 [[原始行标签, 改后说明], …] 供面板预览，让人看清"顶掉了什么" */
+function evApplyPointEdits(pid){
+  const info=[];
+  Object.keys(EDITS).forEach(k=>{if(EDITS[k]&&EDITS[k].ev)delete EDITS[k];});
+  const busy=new Set();                          /* 已被别的事件拍过的行，不能重复拍 */
+  evForEach(()=>{
+    const v=evCurValue(); if(!v)return;
+    const k=evKind(v), rows=curRows(), nm=evName(v);
+    if(k==='swap'){
+      Object.keys(EV_SWAP).forEach(is=>{
+        const i=+is;if(!rows[i])return;
+        const was=labelOf(rows[i]);
+        EDITS[i]=Object.assign({},EDITS[i],{ev:true,slot:+EV_SWAP[i],var:0,mod:0});
+        info.push([was,labelOf(curRows()[i])+'（'+nm+'：就地换槽）']);
+      });
+    }else if(k==='place'){
+      const sel=EV_PLACE.slice();
+      const skip=Array.from(busy).concat(Object.keys(EV_SWAP).map(Number));
+      const free=sel.length?evFreeRows(pid,sel.length,skip)
+        .filter(i=>+rows[i][2]!==+evSlotOf(v)&&(!EDITS[i]||!EDITS[i].ev)):[];
+      sel.forEach((a,j)=>{
+        const i=free[j];if(i===undefined)return;
+        busy.add(i);
+        const was=labelOf(rows[i]);
+        EDITS[i]=Object.assign({},EDITS[i],{ev:true,ap:+a,slot:evSlotOf(v),var:0,mod:0,mi:j});
+        info.push([was,labelOf(curRows()[i])+'（'+nm+'：腾这一行放点位）']);
+      });
+      if(free.length<sel.length)info.push(['—','⚠ '+nm+' 的可腾行不够：只放了 '+free.length+' 个点位'+
+        (STEAL_VISIBLE?'（连"看得见的据点"也算上还是不够）':'（这张图没有"看不见的事件点位行"了 —— 要顶掉看得见的据点，请勾上面的选项）')]);
+    }
+  });
+  return info;
+}
+/* swap 型的「可改位置」= 这张图里能就地换槽的行（200/210 → Major Base；230 → Minor Base） */
+function evSwapTargets(pid,v){
+  const out=[],rows=curRows(),big=(+v===200||+v===210);
+  rows.forEach((r,i)=>{
+    const nm=String((DATA.attachPoints[r[1]]||[''])[0]);
+    if(big){if(nm.indexOf('Major Base')===0&&BIG_SLOT[r[1]])out.push({i:i,attach:r[1],slot:BIG_SLOT[r[1]]});}
+    else if(+v===230){if(nm.indexOf('Minor Base')===0)out.push({i:i,attach:r[1],slot:4090});}
+  });
+  return out;
+}
+/* 腾行：给 place 型 / ⑦多只山羊挑 n 行牺牲。
+   ⛔⛔ 2026-09-18 用户报 bug 后整块重写（老规则会把他自己刚改的行吃掉）——
+     症状（用户原话）：「我增加山羊交易时候，好些被连带改变了…莫名其妙的一些原本我改的全血瓶点位被变成了魔法师塔」
+     老规则 = 按"这个槽在图上出现几次"排序（出现越多越先腾）⇒ 她把 N 个点都改成血瓶教堂(4100) 以后，
+     槽 4100 就成了图里最"重复"的槽 ⇒ 腾行走的第一个就是她自己改的那批。
+     实测（模拟"改 6 个点为血瓶 → 放 3 只山羊"）：12 张图腾 36 行，其中 17 行命中的正是她刚改的行。
+   新规则（四条护栏）：
+     ① ⛔ 永不腾【本次已经改过的行】（EDITS 里有改动的行）—— 这是那条 bug 的根治；
+     ② ⛔ 永不腾【起始区那两行】（Starter Major/Minor Base = 玩家落地点；⑦ 手动挑行本来就排除它们，
+          老腾行没排除 ⇒ 会腾到出生点上）；
+     ③ ⛔ 不拿【山羊交易行】当腾行材料；
+     ④ 零代价优先：**只腾"玩家看不见的事件点位行"**（`Night Horde - …` 优先，其后 `Event - …`）；
+        "玩家看得见的据点"（野外头目/监牢/教堂/要塞/遗迹/魔法师塔…）**默认一律不动**，
+        要动必须用户显式勾「允许顶掉可见据点」（STEAL_VISIBLE）。
+   ⇒ 返回 [] = 这张图没有零代价的可腾行（调用方负责提示，⛔ 不再自动替她顶掉看得见的据点）。 */
+let STEAL_VISIBLE=false;      /* ⚠ 允许顶掉"玩家看得见的据点"（默认关；界面上有勾选框） */
+function setStealVisible(v){STEAL_VISIBLE=!!v;render();showPlainMer();showEvents();}
+function evFreeRows(pid,n,skip){
+  const rows=curRows(),used=new Set((skip||[]).map(Number)),evH=[],evE=[],vis=[];
+  const isEv=r=>{const nm=String((DATA.attachPoints[r[1]]||[''])[0]);return nm.indexOf('Event')===0||nm.indexOf('Night Horde')===0;};
+  const isHorde=r=>String((DATA.attachPoints[r[1]]||[''])[0]).indexOf('Night Horde')===0;
+  rows.forEach((r,i)=>{
+    if(used.has(i))return;
+    if(r[1]===756||r[1]===757)return;
+    if(isStarterAtt(r[1]))return;                       /* ② 出生点那两行不动 */
+    if(EDITS[i]!==undefined)return;                     /* ① 你本次改过的行不动（真 bug 修） */
+    if(String(r[2])==='4940')return;                    /* ③ 山羊交易行不当材料 */
+    if(isEv(r)){ (isHorde(r)?evH:evE).push({i:i,p:0}); } /* ④ 零代价：看不见的事件点位行 */
+    else{const dup=rows.filter(x=>+x[2]===+r[2]).length; if(dup>1)vis.push({i:i,p:100-dup});}
+  });
+  evH.sort((a,b)=>a.p-b.p);evE.sort((a,b)=>a.p-b.p);vis.sort((a,b)=>a.p-b.p);
+  const pool=evH.concat(evE,STEAL_VISIBLE?vis:[]);
+  return pool.slice(0,n).map(c=>c.i);
+}
+const isGHPid=pid=>pidRare(pid)===4;                       // 地形 4 = 大空洞（DLC）
+const evDeclOf=pid=>{const d=evDeclRow(pid);return d?+d.row[3]:null;};
+const evDayOf=pid=>{const d=evDayRow(pid);return d?((+d.row[3]===800)?'第1天':'第2天'):null;};
+const evDayNumOf=pid=>{const d=evDayRow(pid);return d?+d.row[3]:null;};
+const evCount=()=>{const c={};Object.keys(DATA.patternFlags).forEach(p=>{
+  const r=evDeclRow(p);if(r)c[+r.row[3]]=(c[+r.row[3]]||0)+1;});return c;};
+const evCntByFam=gh=>{const c={};for(const p in DATA.patternFlags){
+  const d=evDeclRow(p);if(!d)continue;if(isGHPid(p)!==!!gh)continue;
+  const v=+d.row[3];c[v]=(c[v]||0)+1;}return c;};
+let EV_VALUE=null;      // 用户选的事件值（null = 没动）
+let EV_OFF=false;       // 用户勾了"不要事件"
+let EV_DAY=null;        // 用户改到的天数（800/801；null = 没动）
+let EV_SPARE=false;     // 原本没有事件的图 + 勾了"有事件" → 用空行腾出来写
+/* ===== 事件「点位」编辑状态（每种事件按自己的规格，可多选、不限数量）===== */
+let EV_SWAP={};        // {行序号: 新槽}        —— swap 型：就地把某个据点位置换成事件内容
+let EV_PLACE=[];       // [落点 attach, …]     —— place 型：选中的专属点位（每个点占一行）
+let EV_IGN=null;       // null | 'up' | 'down' | 'both' —— ignite 型：点上面/下面/都点
+let EV_BOSS=4840;      // extra 型：额外夜boss 用哪个场地槽（默认 4840 玛尔基特）
+/* ===== ⭐ 一张图挂【多个】事件（2026-09-18 用户实测：可行！）=====
+   EV_LIST = [{v, day, swap:{行:槽}, place:[落点…], ign:'up'|'down'|'both'|null}, …]
+   EV_SEL  = 正在编辑的那一条；下面所有 ev* 函数依旧作用在"当前这一条"上（改动后 evStore() 写回）
+   ⚠️ 实测：第 1 天/第 2 天以外的"天内时刻"数据层没有字段（PATTERN_MODIFIER 只有 800/801），
+      所以时间列现在只有 第1天/第2天 —— 列表按它排序 */
+let EV_LIST=[], EV_SEL=0;
+function evList(){ if(!EV_LIST.length)EV_LIST.push({v:null,day:null,swap:{},place:[],ign:null});
+  if(EV_SEL<0||EV_SEL>=EV_LIST.length)EV_SEL=0; return EV_LIST; }
+function evLoad(i){ evList(); EV_SEL=i; const e=EV_LIST[i];
+  EV_VALUE=(e.v===undefined?null:e.v); EV_DAY=(e.day===undefined?null:e.day);
+  EV_SWAP=e.swap||{}; EV_PLACE=e.place||[]; EV_IGN=e.ign||null; EV_OFF=!!e.off; }
+function evStore(i){ i=(i===undefined?EV_SEL:i); if(!EV_LIST[i])return;
+  EV_LIST[i]=Object.assign({},EV_LIST[i],{v:EV_VALUE,day:EV_DAY,swap:EV_SWAP,place:EV_PLACE,ign:EV_IGN,off:EV_OFF}); }
+/* 依次把每条事件装进"当前变量"跑一遍 fn，再写回（导出/预览都靠它） */
+function evForEach(fn){
+  const keep={sel:EV_SEL,val:EV_VALUE,day:EV_DAY,swap:EV_SWAP,place:EV_PLACE,ign:EV_IGN,off:EV_OFF};
+  evList().forEach((e,i)=>{ evLoad(i); fn(i,e); evStore(i); });
+  EV_SEL=keep.sel;EV_VALUE=keep.val;EV_DAY=keep.day;EV_SWAP=keep.swap;EV_PLACE=keep.place;EV_IGN=keep.ign;EV_OFF=keep.off;
+}
+const evSorted=()=>evList().map((e,i)=>({e:e,i:i})).sort((a,b)=>((a.e.day||800)-(b.e.day||800))||(a.i-b.i));
+function evPickIdx(i){ evStore(); evLoad(i); render(); showEvents(); }
+function evAddEvent(v){ evStore();
+  EV_LIST.push({v:+v,day:null,swap:{},place:[],ign:null,off:false});
+  evLoad(EV_LIST.length-1); render(); showEvents(); }
+function evDelEvent(i){ evList(); EV_LIST.splice(i,1);
+  if(!EV_LIST.length)EV_LIST.push({v:null,day:null,swap:{},place:[],ign:null});
+  evLoad(Math.max(0,Math.min(i,EV_LIST.length-1))); render(); showEvents(); }
+function evSetEntryDay(i,d){ const keep=EV_SEL; evLoad(i); EV_DAY=(+d===0?null:+d); evStore(i); evLoad(keep); render(); showEvents(); }
+/* 可腾的登记行池（写"多事件"时给第 2 条以后的事件用；⛔ 不碰地形行/起始区行） */
+function evFlagPool(pid,used){
+  const rows=pfRows(pid), skip=new Set(Array.from(used||[]).map(String)), out=[];
+  const bads=new Set([190,150,1000]);   /* 起始区 / 特殊段：不动 */
+  rows.forEach((r,i)=>{
+    const rid=+r[0]; if(skip.has(String(rid)))return;
+    if(bads.has(+r[4]))return;
+    if(+r[4]===0&&+r[3]!==0)return;                       /* 已经是地形行(10~15)或事件声明：跳过 */
+    if(+r[3]===0&&+r[4]===0&&+r[5]===0)out.push({i:i,row:r,p:0});            /* 空行 */
+    else if(+r[4]===800&&+r[3]===0)out.push({i:i,row:r,p:1});                /* 藏宝图行 */
+    else if(+r[3]===0&&+r[5]===0)out.push({i:i,row:r,p:2});                  /* mod=0 且没旗标 = 没声明什么 */
+    else out.push({i:i,row:r,p:5});                                          /* 其它：最后才用 */
+  });
+  return out.sort((a,b)=>a.p-b.p);
+}
+function evResetPoints(){Object.keys(EV_SWAP).forEach(k=>delete EV_SWAP[k]);EV_PLACE.length=0;EV_IGN=null;}
+function evSwapToggle(i,slot){if(EV_SWAP[i]!==undefined)delete EV_SWAP[i];else EV_SWAP[i]=slot;evStore();render();showEvents();}
+function evPlaceToggle(a){const k=EV_PLACE.indexOf(+a);if(k>=0)EV_PLACE.splice(k,1);else EV_PLACE.push(+a);evStore();render();showEvents();}
+function evIgniteSet(m){EV_IGN=(EV_IGN===m?null:m);evStore();render();showEvents();}
+function evBossSet(s){EV_BOSS=+s;render();showEvents();}
+const evBossCands=()=>{const t=(DATA.bossSite&&DATA.bossSite.night)||{};
+  return Object.keys(t).map(b=>({boss:+b,slot:+t[b]})).sort((a,b)=>a.slot-b.slot);};
+const evBossMod=s=>{const t=(DATA.bossSite&&DATA.bossSite.night)||{};
+  for(const b in t)if(+t[b]===+s)return +b;return slotToBoss(+s)||0;};
+function evClearPoints(){evResetPoints();evStore();render();showEvents();}
+function evOrigValue(){return CUR?evDeclOf(CUR.pattern):null;}
+function evCurValue(){if(EV_OFF)return 0;if(EV_VALUE!==null)return EV_VALUE;return evOrigValue();}
+function setEventValue(v){
+  const old=EV_VALUE;
+  if(+v===0){EV_OFF=true;EV_VALUE=null;EV_SPARE=false;EV_DAY=null;}
+  else{EV_OFF=false;EV_VALUE=+v;EV_SPARE=(evOrigValue()===null);}
+  if(+v!==+old)evResetPoints();          /* 换事件 → 点位跟着清掉（每种事件点位不通用） */
+  evStore();
+  render();showEvents();
+}
+function setEventDay(d){EV_DAY=(+d===0?null:+d);evStore();render();showEvents();}
+function revertEvent(){EV_VALUE=null;EV_OFF=false;EV_DAY=null;EV_SPARE=false;evResetPoints();evStore();render();showEvents();}
+/* 算出「变成现在这个样子」要写回登记表的行（全部是【改现有行】，覆盖导入，⛔ 不加行） */
+/* 找一条「没声明什么内容」的登记行，用来写【点火行】（modifier=0 优先；已有别的用途的行不动） */
+function evIgniteRow(pid,used){
+  const rows=pfRows(pid),skip=new Set((used||[]).map(String));
+  const prefs=[3700,3600,500,350,360,99999];
+  for(const s of prefs)for(let i=0;i<rows.length;i++){
+    const r=rows[i];
+    if(+r[4]===s&&+r[3]===0&&+r[5]===0&&!skip.has(String(r[0])))return {idx:i,row:r};
+  }
+  return null;
+}
+/* 找这张图的「藏宝图行」（set=800 + mod=0）—— 没"第几天行"的图用它腾位子写天数（B4a 实测成功） */
+const evBuriedRow=pid=>{const rows=pfRows(pid),skip=0;
+  for(let i=0;i<rows.length;i++){const r=rows[i];if(+r[4]===800&&+r[3]===0)return {idx:i,row:r};}
+  return null;};
+function evWriteRows(pid){
+  const out=[];
+  /* ⛔ 护栏：大空洞（DLC）地形本次不做（用户 2026-09-17 明令）—— 界面上不给点，逻辑上也直接挡掉 */
+  if(isGHPid(pid))return out;
+  const gh=isGHPid(pid), decl=evDeclRow(pid), day=evDayRow(pid), spare=evSpareRow(pid);
+  const orig=decl?+decl.row[3]:null, cur=evCurValue();
+  if(decl){
+    if(+cur!==+orig){
+      const f=decl.row.slice();f[3]=cur;f[5]=(cur?evDeclFlag(cur):0);
+      out.push({rid:f[0],f:f,tag:'事件声明行',row:decl.row,
+        why:(orig?evName(orig):'无事件')+' → '+(cur?evName(cur):'无事件')+
+            '（标志 '+(+decl.row[5])+' → '+f[5]+'）'});
+    }
+    if(day){
+      if(cur>0){
+        const newSet=evSetOf(cur,gh), wantDay=(EV_DAY!==null?+EV_DAY:+day.row[3]);
+        if(newSet&&(+day.row[4]!==+newSet||+day.row[3]!==+wantDay)){
+          const f=day.row.slice();f[4]=newSet;f[3]=wantDay;f[5]=dayFlagFor(newSet,wantDay,kOfDayRow(day.row));
+          out.push({rid:f[0],f:f,tag:'第几天行',row:day.row,
+            why:(+day.row[3]===800?'第1天':'第2天')+'（事件组 '+day.row[4]+'） → '+
+                (wantDay===800?'第1天':'第2天')+'（事件组 '+newSet+'）'});
+        }
+      }else if(+day.row[3]!==0||+day.row[4]!==0||+day.row[5]!==0){
+        const f=day.row.slice();f[3]=0;f[4]=0;f[5]=0;
+        out.push({rid:f[0],f:f,tag:'第几天行',row:day.row,why:'清成 0（= 原版「这张图没有事件」的写法）'});
+      }
+    }
+    /* 这张图原版【没有「第几天」行】⇒ 腾"藏宝图行"的位子写天数（2026-09-18 B4a 实测成功） */
+    if(!day&&cur>0){
+      const bt=evBuriedRow(pid);
+      if(bt){
+        const f=bt.row.slice();f[3]=(EV_DAY!==null?+EV_DAY:800);f[4]=evSetOf(cur,gh);f[5]=dayFlagFor(f[4],f[3],0);
+        out.push({rid:f[0],f:f,tag:'第几天行（腾「藏宝图行」的位子）',row:bt.row,
+          why:'这张图原版没有「第几天」行 ⇒ 用它的藏宝图行腾位子：组 '+f[4]+' / '+(f[3]===800?'第1天':'第2天')+' / 旗标 '+f[5]+'（代价：这张图不再声明藏宝图）'});
+      }else out.push({rid:'—',f:null,tag:'第几天行',why:'⚠ 这张图没有可腾的「藏宝图行」，指定不了第几天'});
+    }
+  }else if(cur>0&&spare){
+    const f=spare.row.slice();f[3]=cur;f[4]=0;f[5]=evDeclFlag(cur);
+    out.push({rid:f[0],f:f,tag:'腾出来的空行',row:spare.row,
+      why:'原本全是 0 → 事件声明：'+(cur?evName(cur):'无事件')+'（标志 0 → '+f[5]+'）'});
+    /* 这类图原版没有「第几天」行 ⇒ 再腾"藏宝图行"写天数（B4a 实测成功） */
+    const bt=evBuriedRow(pid);
+    if(bt){
+      const g=bt.row.slice();g[3]=(EV_DAY!==null?+EV_DAY:800);g[4]=evSetOf(cur,gh);g[5]=dayFlagFor(g[4],g[3],0);
+      out.push({rid:g[0],f:g,tag:'第几天行（腾「藏宝图行」的位子）',row:bt.row,
+        why:'这张图原版没有「第几天」行 ⇒ 用藏宝图行腾位子：组 '+g[4]+' / '+(g[3]===800?'第1天':'第2天')+' / 旗标 '+g[5]});
+    }else out.push({rid:'—',f:null,tag:'第几天行',why:'⚠ 这张图没有可腾的「藏宝图行」，指定不了第几天'});
+  }
+  /* ⭐ ignite 型（140 癫火塔）：还要【点火行】= modifierSet=3500 + modifier=0 + 旗标（上塔/下塔） */
+  if(cur>0&&evKind(cur)==='ignite'&&EV_IGN){
+    const need=(EV_IGN==='both')?['up','down']:[EV_IGN],used=[];
+    need.forEach(which=>{
+      const ig=evIgniteRow(pid,used);
+      if(!ig){out.push({rid:'—',f:null,tag:'点火行',why:'⚠ 这张图没有可腾的登记行放点火行'});return;}
+      used.push(ig.row[0]);
+      const f=ig.row.slice();f[3]=0;f[4]=3500;f[5]=IGNITE_TOWER[which];
+      out.push({rid:f[0],f:f,tag:'点火行',row:ig.row,
+        why:'点火（'+((which==='up')?'上面那座':'下面那座')+'）：组 3500 / 旗标 '+f[5]});
+    });
+  }
+  return out;
+}
+function evRowsHtml(pid){
+  const wr=evWriteRows(pid);
+  return '<h3>这次会写进 bin 的行（覆盖导入，⛔ 不勾 Append）</h3>'+
+    (wr.length?wr.map(x=>`<div class="kv"><span>${x.tag}（行 ${x.rid}）</span><span>${x.why}</span></div>`).join('')
+              :'<div class="hint">还没有改动。</div>');
+}
+function showEvents(){
+  const box=$('eventBox');if(!box)return;
+  if(!CUR){box.innerHTML='（还没载入种子）';return;}
+  const pid=CUR.pattern, orig=evOrigValue(), cur=evCurValue(), gh=isGHPid(pid);
+  const decl=evDeclRow(pid), day=evDayRow(pid), spare=evSpareRow(pid);
+  const cB=evCntByFam(false), cG=evCntByFam(true);
+  let h='';
+  /* ---- 大空洞地形：本次不做（和出生点一样的处理） ---- */
+  if(gh){
+    h+='<div class="hint mod">这张图是 <b>大空洞（DLC）</b>地形 —— <b>大空洞我们暂不做</b>（和出生点一样先跳过）。'+
+       '下面把两套事件都列出来，只为说明大空洞那套是<b>单独一组</b>（组号 505~560），这里不给改。</div>';
+    h+=EV_FAM.map(f=>'<div class="hint" style="margin:8px 0 4px"><b>'+f.label+'</b></div>'+
+      f.items.map(e=>'<div class="cand off"><span>'+e.name+(e.raid?'（夜王突袭）':'')+'［'+(f.gh?'大空洞组 '+e.set:'本体组 '+e.set)+'］</span>'+
+        '<small>值 '+e.v+'</small></div>').join('')).join('');
+    box.innerHTML=h;return;
+  }
+  /* ---- 本体地形：可改 ---- */
+  h+='<label style="display:flex;gap:8px;align-items:center;background:#131722;border:1px solid var(--line);border-radius:6px;padding:6px 8px">'+
+     '<input type="checkbox" style="width:auto" '+(cur?'checked':'')+' onchange="setEventValue(this.checked?(evOrigValue()||180):0)">'+
+     '<span>这张图<b>'+(cur?('有特殊事件：'+evName(cur)):'没有特殊事件')+'</b></span></label>';
+  h+='<div class="hint">⭐ <b>勾选=有</b>（下面选是哪个事件）　<b>不勾=没有</b>（把这个事件从这张图上去掉）</div>';
+  h+='<div class="kv"><span>原版这张图</span><span>'+(orig?(evName(orig)+(evDayOf(pid)?'（'+evDayOf(pid)+'）':'')):'没有特殊事件')+'</span></div>';
+  /* ⭐⭐ 事件清单：一张图可挂多个事件（2026-09-18 实测可行）；只能按"第几天"排（天内时刻做不到） */
+  h+='<h3>这张图的事件清单（按「第几天」排）</h3>';
+  h+='<div class="hint">一张图能挂<b>多个</b>事件（已实测）。点一行 = 选中它、去下面改它的点位；'+
+     '右边的按钮只改它<b>第几天</b>出现。</div>';
+  h+='<div class="hint mod">⚠️ <b>时间只能到「第几天」这一档</b>：数据层里没有"天内几点/缩圈前缩圈后"这种字段（官方枚举只有"第1天/第2天"）⇒ '+
+     '<b>同一天的多条事件会在同一时刻一起触发</b>，先后顺序调不了。要错开就只能一条放第1天、一条放第2天。</div>';
+  h+=evSorted().map(({e,i})=>{
+    const v=(e.v===null||e.v===undefined)?(orig||0):+e.v;
+    const pts=[];
+    if(e.place&&e.place.length)pts.push('点位 '+e.place.length);
+    if(e.swap&&Object.keys(e.swap).length)pts.push('换据点 '+Object.keys(e.swap).length);
+    if(e.ign)pts.push('点火'+(e.ign==='both'?'(两座)':(e.ign==='up'?'(上)':'(下)')));
+    return '<div class="cand'+(i===EV_SEL?' sel':'')+'" onclick="evPickIdx('+i+')">'+
+      '<span>'+(i+1)+'. '+(v?evName(v):'（把这张图的事件清空）')+'</span>'+
+      '<small>'+(e.day?((+e.day===800)?'第1天':'第2天'):'跟原版')+(pts.length?('　'+pts.join('、')):'')+'</small>'+
+      '<small style="margin-left:auto;display:flex;gap:4px">'+
+        '<button class="'+((+e.day===800)?'primary':'')+'" onclick="event.stopPropagation();evSetEntryDay('+i+',800)">第1天</button>'+
+        '<button class="'+((+e.day===801)?'primary':'')+'" onclick="event.stopPropagation();evSetEntryDay('+i+',801)">第2天</button>'+
+        '<button class="'+(e.day?'':'primary')+'" onclick="event.stopPropagation();evSetEntryDay('+i+',0)">跟原版</button>'+
+        '<button onclick="event.stopPropagation();evDelEvent('+i+')">删掉</button>'+
+      '</small></div>';
+  }).join('');
+  h+='<div class="row"><label>＋ 再加一条事件</label><select id="addEvSel">'+
+     EV_BASE.map(e=>'<option value="'+e.v+'">'+e.name+'</option>').join('')+
+     '</select><button onclick="evAddEvent(($(\'addEvSel\')||{}).value||180)">加一条</button></div>';
+  h+='<div class="hint mod">⚠ 能挂几条取决于这张图**还有几行能腾**：第 1 条用原版那些行，第 2 条起会去腾"没声明什么内容"的行（面板底部会列出来腾了哪些）。</div>';
+  if(cur){
+    h+='<h3>选事件（点一下就换）</h3>';
+    h+=EV_FAM.map(f=>{
+      const tip=f.gh?'':('<small style="color:var(--dim)">　—— 和上面那套是两套不同的事件（组号不同），大空洞那批图才用它</small>');
+      return '<div class="hint" style="margin:8px 0 4px"><b>'+f.label+'</b>'+(f.gh?('（'+f.tip+'）'):tip)+'</div>'+
+        f.items.map(e=>{
+          const same=(+e.v===+cur), n=(f.gh?cG:cB)[e.v]||0;
+          if(f.gh)return '<div class="cand off"><span>'+e.name+(e.raid?'（夜王突袭）':'')+'</span>'+
+            '<small>值 '+e.v+'　大空洞组 '+e.set+'</small></div>';
+          return '<div class="cand'+(same?' sel':'')+'" onclick="setEventValue('+e.v+')">'+
+            '<span>'+e.name+(e.raid?'（夜王突袭）':'')+'</span>'+
+            '<small>值 '+e.v+'　事件组 '+e.set+'　原版 '+n+' 张图有</small></div>';
+        }).join('');
+    }).join('');
+    h+='<h3>第几天出现（只能到"哪天"，天内时刻做不到）</h3>';
+    if(day){
+      const curD=+day.row[3], wantD=(EV_DAY!==null?+EV_DAY:curD);
+      h+='<div class="kv"><span>这一行现在写的是</span><span>'+(curD===800?'第1天':'第2天')+'</span></div>';
+      h+='<div class="row">'+[0,800,801].map(d=>{
+        const on=(d===0)?(EV_DAY===null):(+wantD===d);
+        const txt=(d===0?'跟原版一样':(d===800?'第1天':'第2天'));
+        return '<button class="'+(on?'primary':'')+'" onclick="setEventDay('+d+')">'+txt+'</button>';
+      }).join('')+'</div>';
+      h+='<div class="hint">第几天单独写在一行里（改它 = 改这一行的天数 + 它的标志 7700/7720+偏移），'+
+         '和"事件是哪个"那一行是两件事，两个都会一起导出去。</div>';
+    }else{
+      h+='<div class="hint mod">⚠ 这张图原版<b>没有「第几天」那一行</b>：本工具不新增行（追加行游戏不认）⇒ <b>指定不了第几天</b>。</div>';
+    }
+    /* ===== 这个事件的「点位」（每种事件按自己的规格；可多选、不限数量）===== */
+    const kd=evKind(cur);
+    evApplyPointEdits(pid);
+    h+='<h3>这个事件的点位</h3>';
+    if(kd==='swap'){
+      const tg=evSwapTargets(pid,cur);
+      const selN=Object.keys(EV_SWAP).length;
+      h+='<div class="hint">点下面的位置，就把那里的据点<b>就地在原地</b>换成'+
+         (+cur===230?'「古老魔法师塔」':'「'+(+cur===200?'陨石点':'灵庙点')+'」（大据点·&lt;地名&gt;）')+
+         '　—— 可以点多个、不限数量。已选 <b>'+selN+'</b> 个。'+
+         (selN?'　<span class="mod">会顶掉那些位置原来的据点（原版也是这么干的）</span>':'')+'</div>';
+      h+=tg.map(t=>{const on=(EV_SWAP[t.i]!==undefined);
+        return '<div class="cand'+(on?' sel':'')+'" onclick="evSwapToggle('+t.i+','+t.slot+')">'+
+          '<span>'+(attCN(t.attach)||('位置 '+t.attach))+'</span>'+
+          '<small>'+(on?('✓ 已换成 '+labelOf(curRows()[t.i])):('现在放的是：'+labelOf(curRows()[t.i])))+'</small></div>';}).join('');
+      if(!tg.length)h+='<div class="hint mod">这张图里没有可改的位置。</div>';
+      /* ⭐ 用户 2026-09-18 实测提醒（只针对陨石这个事件，别的没有） */
+      if(+cur===200)h+='<div class="hint mod">⚠️ <b>提醒</b>：上面可以标多个位置，但触发后游戏<b>只会掉一颗陨石、只砸其中一个位置</b>'+
+        '（用户 2026-09-18 进游戏实测）。想让它砸哪儿，就是"标了哪几个位置"里被抽中的那一个。</div>';
+    }else if(kd==='place'){
+      const pts=evPlacePoints(cur);
+      h+='<div class="hint">这个事件用它<b>自己的点位</b>（候选 '+pts.length+' 个）：点一个加一个、再点一次取消，<b>不限数量</b>；'+
+         '每加一个就腾掉一行：<b>只腾"玩家看不见的事件点位行"</b>（腾了没代价），<span class="mod">你自己刚改过的行绝不动</span>。已选 <b>'+EV_PLACE.length+'</b> 个'+
+         (EV_PLACE.length?'':'（<span class="mod">没选就默认给第 1 个点</span>）')+'。</div>';
+      h+='<label style="display:flex;gap:8px;align-items:center;background:#131722;border:1px solid var(--line);border-radius:6px;padding:6px 8px">'+
+         '<input type="checkbox" style="width:auto" '+(STEAL_VISIBLE?'checked':'')+' onchange="setStealVisible(this.checked)">'+
+         '<span>⚠ 允许<b>顶掉玩家看得见的据点</b>来腾位置（默认关）</span></label>';
+      h+=pts.map(a=>'<div class="cand'+(EV_PLACE.includes(+a)?' sel':'')+'" onclick="evPlaceToggle('+a+')">'+
+        '<span>'+(attCN(a)||('点位 '+a))+'</span><small>'+(EV_PLACE.includes(+a)?'✓ 已选':'点一下选中')+'</small></div>').join('');
+    }else if(kd==='ignite'){
+      h+='<div class="hint">这个事件不用内容行，只要<b>点火</b>：地图上本来就固定有那两座塔，点了才烧起来。</div>';
+      h+='<div class="row">'+[['up','点火（上面那座）'],['down','点火（下面那座）'],['both','两座都点']].map(x=>
+        '<button class="'+(EV_IGN===x[0]?'primary':'')+'" onclick="evIgniteSet(\''+x[0]+'\')">'+x[1]+'</button>').join('')+'</div>';
+    }else if(kd==='extra'){
+      h+='<div class="hint">这个事件写在<b>夜boss表</b>的 extraBoss 两列上（不占据点行、不动登记表其它列）：下面选多打哪一只。</div>';
+      h+='<div class="row"><label>多打一只</label><select onchange="evBossSet(this.value)">'+
+        evBossCands().map(c=>'<option value="'+c.slot+'"'+(+c.slot===+EV_BOSS?' selected':'')+'>'+bossNameOfSlot(c.slot)+'（槽 '+c.slot+'）</option>').join('')+
+        '</select></div>';
+    }else{
+      h+='<div class="hint">这个事件<b>不占点位</b> —— 写"有 + 第几天"就会出现。</div>';
+    }
+    h+=evRowsHtml(pid);
+    h+='<div class="hint">上面每一行都是<b>改现有行</b>（覆盖导入）—— 这是唯一在游戏里验证过生效的改法。</div>'+
+       '<div class="row"><button onclick="revertEvent()">还原事件 / 天数</button></div>';
+  }else{
+    if(decl){
+      h+='<div class="hint">「不勾」= 把这个事件从这张图上清掉（按原版「这张图没有事件」的写法，全 0）。</div>';
+      h+=evRowsHtml(pid);
+      h+='<div class="row"><button onclick="revertEvent()">还原事件 / 天数</button></div>';
+    }else{
+      h+='<div class="hint">原版这张图<b>没有事件、也没有「第几天」行</b>。勾上「有事件」就能给它加一个'+
+         (spare?('<b>（用它的空行 —— 行 '+spare.row[0]+' —— 腾出来写）</b>'):'')+
+         '；这类图<b>指定不了第几天</b>（没那一行，且不新增行）。</div>';
+    }
+  }
+  box.innerHTML=h;
+}
+
+function starterRowsInfo(){
+  const out={major:null,minor:null};
+  curRows().forEach((r,i)=>{
+    if(!isStarterAtt(r[1]))return;
+    if(isStarterMajor(r[1]))out.major={r:r,i:i};else out.minor={r:r,i:i};
+  });
+  return out;
+}
+/* 这张图的「起始区」那一行（登记表 modifierSet=190，modifier=700~708 → 起始区 1~9） */
+function startAreaRow(pid){
+  const rows=(DATA.patternFlags&&DATA.patternFlags[pid])||[];
+  for(let i=0;i<rows.length;i++){const r=rows[i];
+    if(+r[4]===START_SET&&+r[3]>=START_BASE&&+r[3]<=START_BASE+8)return {idx:i,row:r,area:+r[3]-START_BASE+1};}
+  return null;
+}
+let SEDIT=null;                                   // 用户换到的起始区（null = 没动过）
+const origAreaOf=pid=>{const s=startAreaRow(pid);return s?s.area:null;};
+function curStartArea(){return SEDIT!==null?SEDIT:origAreaOf(CUR?CUR.pattern:null);}
+const areaOK=(k,rare)=>starterOK(AREA_MINOR[(+k)-1],rare);
+function showSpawn(){
+  const box=$('sel');if(!box)return;
+  if(!CUR){box.innerHTML='（还没载入种子）';return;}
+  const orig=origAreaOf(CUR.pattern),cur=curStartArea(),rm=+((($('rareSel')||{}).value)||0);
+  const info0=starterRowsInfo();
+  let h='<h3>出生点（你落地的地方）</h3>';
+  if(orig===null||(!info0.major&&!info0.minor)){
+    box.innerHTML=h+'<div class="hint">这张图没有出生点数据（DLC / 大空洞那批图不在本次范围内）。</div>';return;}
+  h+=`<div class="kv"><span>现在这张图的出生点</span><span>${areaCN(cur)}</span></div>`;
+  h+='<div class="hint">原版一共只有这 <b>9</b> 个出生点，只能在它们之间换（位置是固定的，不能随便挪）。'+
+     '同一个出生点里可能有几个「进场方向」，那是游戏自己挑的。</div>';
+  h+='<h3>换成哪个（点一下就换）</h3>';
+  h+=[1,2,3,4,5,6,7,8,9].map(k=>{
+    const ok=areaOK(k,rm),sel=(+k===+cur);
+    const note=!ok?'(这个地形没有这个出生点)':(+k===+orig?'原版就是这儿':(sel?'现在选的是这个':''));
+    return `<div class="cand${sel?' sel':''}${ok?'':' off'}" ${ok?`onclick="setSpawnArea(${k})"`:''}>`+
+      `<span>${areaCN(k)}</span><small>${note}</small></div>`;
+  }).join('');
+  h+='<div class="hint">⚠️ 改完出生点要导<b>两张</b> CSV：据点表那份（排布）+ 导出时多给的那份登记表（写的就是<b>起始区</b>那一行）。'+
+     '<b>只导据点表那份是不会生效的</b>。</div>';
+  h+='<div class="row"><button onclick="revertSpawn()">还原出生点</button></div>';
+  box.innerHTML=h;
+}
+function setSpawnArea(k){
+  if(!CUR)return;
+  const orig=origAreaOf(CUR.pattern);if(orig===null)return;
+  const info=starterRowsInfo();if(!info.major&&!info.minor)return;   // 没有出生点行的图（DLC/大空洞）不动
+  SEDIT=(+k===+orig)?null:+k;
+  [[info.major,AREA_MAJOR],[info.minor,AREA_MINOR]].forEach(([x,arr])=>{
+    if(!x)return;
+    if(+k===+orig){delete EDITS[x.i];return;}        // 点回原版 = 不留改动
+    const a=arr[(+k)-1];
+    const p=STARTER_PICK[a]||{}, ns=(p.slot!==undefined)?p.slot:STARTER_SLOT[a];
+    EDITS[x.i]=Object.assign({},EDITS[x.i],{ap:a,slot:(ns!==undefined?ns:undefined),
+      var:(p.var!==undefined?p.var:undefined)});
+  });
+  render();showSpawn();
+}
+function revertSpawn(){
+  SEDIT=null;
+  const info=starterRowsInfo();
+  [info.major,info.minor].forEach(x=>{if(x)delete EDITS[x.i];});
+  render();showSpawn();
+}
+/* ===================== 候选（按类别严格隔离，⛔不跨类） ===================== */
+function candByKind(k){
+  const out=[];
+  Object.keys(DATA.slotKind).filter(s=>DATA.slotKind[s]===k).map(Number).sort((a,b)=>a-b).forEach(s=>{
+    const b=DATA.slotBoss[s]||0;
+    const cn=cnSlot(s)||sname(s);
+    const nm=(k==='field'||k==='basement')?(b?bname(b):cn):cn.replace('Night Horde - ','');
+    out.push({slot:s,mod:(k==='horde'?180:b),txt:KIND_CN[k]+'·'+nm,sub:''});
+  });
+  return out;
+}
+function candCastle(){
+  /* 主城类型也从 bin 的数据库里来（enhance 生成的 castleSlots.typeSlot = 主城点位上出现过的槽）
+     → 以后新加的主城类型也会自动出现在列表里 */
+  const cs=(DATA.castleSlots&&DATA.castleSlots.typeSlot)||['4941','4942','4943'];
+  return [...new Set(cs.map(Number))].sort((a,b)=>a-b).map(s=>({slot:s,mod:0,txt:'主城·'+(CASTLE_CN[s]||cnSlot(s)||sname(s)),sub:''}));
+}
+function candEvergaol(row){
+  const e=DATA.evergaol&&DATA.evergaol[row[2]];if(!e)return [];
+  const det=EG_DETAIL[String(row[2])]||{};
+  let list=(e.variants||[]);
+  if(!list.length)list=Object.keys(det.variants||{}).map(Number).sort((a,b)=>a-b);
+  return list.map(v=>{
+    const info=egInfo(row[2],v);
+    return {slot:row[2],var:v,
+      txt:'变体 '+v+' · '+(info?info.label:('未知变体'+v)),
+      sub:'牢'+e.letter+'·'+e.tierCN+(info?('　'+(info.kind==='single'?'单体':'族（族内随机）')):'')};
+  });
+}
+function candSameGroup(row){const g=groupOfSlot(row[2]);if(!g)return [];
+  return [...new Set(DATA.groups[g][3])].map(s=>({slot:s,mod:0,txt:(cnSlot(s)||sname(s)),sub:'同类型地块'}));}
+/* 教堂 ⇄ 魔法师塔 ⇄ 古老魔法师塔 ⇄ 高级村落商人 ⇄ 野外小营地（只给"原版真在这个点位上放过"的） */
+function candSwapFamily(row){
+  const set=ATT_SLOTS[row[1]]||new Set();
+  const out=[];
+  SWAP_FAMILY.forEach(s=>{
+    if(String(s)===String(row[2]))return;
+    if(!set.has(String(s)))return;
+    out.push({slot:+s,mod:0,txt:(cnSlot(s)||sname(s)),sub:'原版在同一批点位可互换'});
+  });
+  return out;
+}
+/* ★★ 2026-09-18 用户要求：据点【全部可以互换】—— 按「类型＋属性」列出全部可选项
+   · 同一类型里"属性相同"的只留一个代表（避免 A/B/C/D 那种一堆重复）
+   · 只换"这里放什么"（槽 + 变体号）；位置(attachId)、地形值(modifier) 都不动
+   ⚠️ 只对 SLOT_TYPE_CN 里点名列出的据点类型开放（夜潮落点 / 突袭落点 / 山羊交易 / 主城 等特殊点不参与） */
+/* 某槽的据点落在【起始区那批落点(350~364 / 2350~2364，就是玩家落地那批)】还是普通落点
+   —— 用来区分"落地款"（例：落地小营地 4301/4302/4341）和普通款（4300/4330/4340/4350） */
+const SLOT_LAND=(()=>{
+  const m={};
+  for(const pid in DATA.patterns)for(const r of DATA.patterns[pid]){
+    const s=String(r[2]);if(!isTypeSlot(s))continue;
+    const a=+r[1],st=((a>=350&&a<=364)||(a>=2350&&a<=2364));
+    const t=m[s]=m[s]||{st:0,fd:0};if(st)t.st++;else t.fd++;
+  }
+  const out={};Object.keys(m).forEach(s=>{out[s]=(m[s].st>m[s].fd)?'starter':'field';});
+  return out;})();
+const slotLand=s=>SLOT_LAND[String(s)]||'field';
+const LAND_TXT={field:'',starter:'落地点：起始区那批（玩家落地那批）'};
+const SLOT_PALETTE=(()=>{
+  const byType={};
+  PALETTE_BLOCK.concat(PALETTE_POINT).forEach(sl=>{
+    const sv=(DATA.slots||{})[sl]||[],vv=sv[4]||[],vi=sv[5]||[];
+    const t=SLOT_TYPE_CN[sl];byType[t]=byType[t]||{g:PAL_GROUP[sl]||'block',opts:[]};
+    let any=false;
+    for(let i=0;i<vv.length;i++){if(vv[i]){byType[t].opts.push({slot:+sl,var:i,attr:ATTR_OF(vi[i])||''});any=true;}}
+    if(!any)byType[t].opts.push({slot:+sl,var:0,attr:''});
+  });
+  const out=[];
+  Object.keys(byType).forEach(t=>{
+    const seen={};
+    byType[t].opts.sort((a,b)=>(a.slot-b.slot)||(a.var-b.var)).forEach(o=>{
+      /* ⭐⭐ 2026-09-18 用户定版（原话）：「把可以换成的血瓶，小营地，魔法师塔，小屋，高级村落商人，车队【一列】，
+         我填什么这里就修改成什么，而不是列一大堆的重复选项」
+         ⇒ 候选 = **类型清单，每个类型只一条**；带属性的类型（营地/遗迹/教堂…）按属性各一条。
+         ⇒ 去重键 = 属性（⛔ 不再按"落点族"拆开，也不列同类型的其它槽）。 */
+      const k=o.attr||'—';
+      if(seen[k])return;seen[k]=1;
+      out.push({type:t,group:byType[t].g,slot:o.slot,var:o.var,attr:o.attr,land:slotLand(o.slot)});
+    });
+  });
+  return out;
+})();
+/* 据点候选：**本族**的据点，一列到底（⛔ 地块族与点位族不混改 —— 用户 2026-09-18）
+   ⭐ 2026-09-18 用户定版（原话）：「把可以换成的血瓶，小营地，魔法师塔，小屋，高级村落商人，车队【一列】，
+      我填什么这里就修改成什么，而不是列一大堆的重复选项」
+   ⇒ 只给一列（当前类型本来就在这一列里），⛔ 不再分「① 同类型 / ② 本族」两段（那样同类型会出现两次）。 */
+function candPalette(curSlot,curVar){
+  const out=[];
+  const g=PAL_GROUP[String(curSlot)]||'block';
+  const same=p=>p.group===g;
+  const add=(p,grp)=>{const isCur=(+p.slot===+curSlot&&+p.var===+curVar);
+    out.push({slot:p.slot,var:p.var,txt:slotLabel(p.slot,p.var),
+      sub:isCur?'现在就是它':('槽 '+p.slot),group:grp});};
+  SLOT_PALETTE.filter(same).forEach(p=>add(p,PAL_HEAD[g]));
+  return out;
+}
+function candidatesFor(row){
+  const k=kindOf(row[2]);
+  if(k==='castle')return candCastle();
+  if(k==='field'||k==='basement'||k==='horde')return candByKind(k);
+  if(k==='evergaol')return candEvergaol(row);
+  if(k==='night')return [];
+  /* ★ 2026-09-18 用户要求：据点全部类型随便换（营地/要塞/遗迹/教堂/魔法师塔/毒池/锻造村…） */
+  if(isTypeSlot(row[2]))return candPalette(row[2],row[3]);
+  const a=candSameGroup(row),b=candSwapFamily(row);
+  const seen=new Set(a.map(x=>String(x.slot)));
+  return a.concat(b.filter(x=>!seen.has(String(x.slot))));
+}
+function showRow(i,row){
+  const e=EDITS[i]||{},k=kindOf(row[2]);
+  if(k==='castle'){showCastle(i);return;}      // 主城走专门的"三件套"面板
+  const cur={slot:e.slot!==undefined?e.slot:row[2],v:e.var!==undefined?e.var:row[3],mod:e.mod!==undefined?e.mod:row[4]};
+  const place=(DATA.attachCN&&DATA.attachCN[row[1]])||(DATA.attachPoints[row[1]]||['?'])[0];
+  const vi0=variantIconOf(cur.slot,cur.v);
+  let h=`<div class="kv"><span>地图上的位置</span><span>${place}</span></div>
+    <div class="kv"><span>现在放的是</span><span>${labelOf([0,row[1],cur.slot,cur.v,cur.mod,0])}</span></div>
+    <div class="kv"><span>类别</span><span>${KIND_CN[k]||k}</span></div>
+    ${vi0?`<div class="kv"><span>属性</span><span>${ATTR_OF(vi0)}（地图上写成文字）</span></div>`:''}
+    <h3>这里能换成（点一下就换）</h3>`;
+  const cands=candidatesFor(row);SEL_CANDS=cands;
+  let lastG='';
+  h+=cands.map((c,idx)=>{
+    let s='';
+    if(c.group&&c.group!==lastG){lastG=c.group;s=`<div class="hint" style="margin:9px 0 4px"><b>${c.group}</b></div>`;}
+    return s+`<div class="cand${(c.slot===cur.slot&&(c.var===undefined||c.var===cur.v))?' sel':''}" onclick="applyCand(${i},${idx})"><span>${c.txt}</span><small>${c.sub||''}</small></div>`;}).join('')||'<div class="hint">这一类暂时没有可替换项</div>';
+  if(k==='night')h+='<div class="hint">夜 boss 请用上面的「第1夜／第2夜」按钮换。</div>';
+  if(k==='evergaol'){
+    const det=EG_DETAIL[String(row[2])]||{};
+    const curV=(e.var!==undefined?e.var:row[3]);
+    const info=egInfo(row[2],curV);
+    h+='<div class="hint">监牢的<b>位置是固定的</b>；能改的是「<b>牢里关的是谁</b>」——上面列表里点哪一项，牢里就是那只（或那一族）。</div>';
+    h+=`<div class="kv"><span>这牢里现在是</span><span>${info?info.label:('变体 '+curV)}${info?('　'+egKindTxt(info)):''}</span></div>`;
+    if(det.roster)h+=`<h3>这座牢（${det.tier}）场地里编好的怪：共 ${det.roster.length} 种</h3><div class="hint">${det.roster.join(' ／ ')}</div>`;
+    h+='<div class="hint">⚠️ 变体只在这些"编好的怪/族"之间换。<b>要让任意监牢装任意 boss</b>（例：让 A 里出古龙），得改这张监牢的<b>场地文件</b>（msb 里加实体 + 事件脚本加分支）—— 属于资产活，要单独立项。</div>';}
+  const rm0=+($('rareSel')?$('rareSel').value:0);
+  const byRare=(DATA.positionsByRare&&DATA.positionsByRare[String(rm0)])||null;
+  const ps=(byRare&&byRare[String(cur.slot)])||(DATA.positionsBySlot&&DATA.positionsBySlot[String(cur.slot)])||[];
+  const canSwap=POS_SWAP_OK.includes(String(cur.slot));
+  if(canSwap&&ps.length>1){
+    h+=`<h3>换位置（这类东西在本地形还能放在下面这些地方）</h3>`;
+    h+=ps.slice(0,30).map(a=>`<div class="cand${a===row[1]?' sel':''}" onclick="setPos(${i},${a})"><span>${(DATA.attachCN&&DATA.attachCN[a])||('位置 '+a)}</span><small>${a===row[1]?'就在这儿':'挪到这儿'}</small></div>`).join('');
+  }
+  if(!canSwap)h+='<div class="hint">普通据点的位置是填满整张图的，⛔不能挪到别处（只有山羊交易这类"全图只放一个"的特殊点才能换位置）。</div>';
+  if(k==='base'){
+    h+='<div class="hint">⭐ <b>据点分两族，各族内部互换、⛔ 不混改</b>：'+
+       '<br>· <b>地块族</b>：要塞 · 营地 · 遗迹 · 教堂 · 锻造村 · 粪坑 —— 这些之间随便换（填满整张图的那批点位）'+
+       '<br>· <b>点位族</b>：魔法师塔 · 古老魔法师塔 · 血瓶教堂 · 高级村落商人 · 小营地 · 车队 · 小屋 —— 只在它们之间换（彼此共用同一批地标点）'+
+       '<br>· 名字统一写成 <b>类型（属性）</b>，例：<b>遗迹（毒）· 教堂（圣）· 营地（发狂）· 粪坑（发狂）</b>；没属性的只写类型。'+
+       '<br>· 「小营地」另有<b>落地款</b>（用玩家出生那批落点的，副标题会标出来）。'+
+       '<br>· ⚠️ 换的只是"这里放什么"：<b>位置不动</b>。</div>';
+  }
+  if(String(cur.slot)==='4940'){
+    const isEv=(+cur.mod===424);
+    h+='<div class="hint">'+(isEv
+      ? '⭐ 山羊交易（modifier=424）：跟着「利普拉遭遇」走，一开始不显示，进行到它的事件时段才出现；玩家过去交易、也可以攻击它（打它=进战斗形态）。位置可像夜 boss 那样换。'
+      : '⭐ 山羊交易（modifier=0）：这一行的 modifier 与 424 那种不同（原版只有 5 张图是 0）。位置可像夜 boss 那样换。')+
+      '<br>⚠️ 它和「主城/营地/要塞旁边的普通商人（图标21）」是<b>两个东西</b>：普通商人是固定点、不随种子变，'+
+      '显示开关和替换列表都跟它分开。</div>';
+  }
+  h+=`<div class="row"><button onclick="clearSlot(${i})">这个地方不放东西（清空）</button></div>`;
+  h+=`<div class="row"><button onclick="revertRow(${i})">还原这个位置</button></div>`;
+  $('sel').innerHTML=h;
+}
+function setPos(i,a){EDITS[i]=Object.assign({},EDITS[i],{ap:a});render();showRow(i,curRows()[i]);}
+function clearSlot(i){EDITS[i]=Object.assign({},EDITS[i],{slot:EMPTY_SLOT,mod:0});render();showRow(i,curRows()[i]);}
+/* ==== 主城：类型 / 楼顶boss / 楼底boss（三项上下排开，不再挤在地图上）==== */
+function rowIndexOfAttach(ap){
+  if(!CUR)return -1;
+  for(let i=0;i<CUR.rows.length;i++){const e=EDITS[i]||{};const a=e.ap!==undefined?e.ap:CUR.rows[i][1];if(a===ap)return i;}
+  return -1;
+}
+function rowSlot(i){if(i<0)return null;const r=curRows()[i];return r?r[2]:null;}
+function setRowSlot(i,slot){
+  if(i<0)return;
+  const b=(DATA.slotBoss&&DATA.slotBoss[String(slot)])||0;
+  EDITS[i]=Object.assign({},EDITS[i],{slot:+slot,mod:b});
+  render();showCastle(i);
+}
+function showCastle(i){
+  const ri=rowIndexOfAttach(190),rf=rowIndexOfAttach(756),rb=rowIndexOfAttach(757);
+  const cs=DATA.castleSlots||{};
+  const curT=rowSlot(ri),curF=rowSlot(rf),curB=rowSlot(rb);
+  let h=`<h3>主城（大世界正中央那一座）</h3>`;
+  h+=`<div class="kv"><span>位置</span><span>固定（地图中心，不随种子挪）</span></div>`;
+  h+=`<div class="kv"><span>主城类型</span><span>${CASTLE_CN[curT]||'—'}</span></div>`;
+  h+=`<div class="kv"><span>楼顶boss</span><span>${cnSlot(curF)||'—'}</span></div>`;
+  h+=`<div class="kv"><span>楼底boss</span><span>${cnSlot(curB)||'—'}</span></div>`;
+  h+=`<h3>① 换主城类型（点一下就换）</h3>`;
+  h+=(cs.typeSlot||['4941','4942','4943']).map(s=>`<div class="cand${+curT===+s?' sel':''}" onclick="setRowSlot(${ri},${s})"><span>主城·${CASTLE_CN[s]||s}</span><small></small></div>`).join('');
+  h+=`<h3>② 换楼顶boss（主城楼顶那只）</h3>`;
+  h+=(cs.roof||[]).map(s=>`<div class="cand${+curF===+s?' sel':''}" onclick="setRowSlot(${rf},${s})"><span>${cnSlot(s)}</span></div>`).join('');
+  h+=`<h3>③ 换楼底boss（下水道那只）</h3>`;
+  h+=(cs.base||[]).map(s=>`<div class="cand${+curB===+s?' sel':''}" onclick="setRowSlot(${rb},${s})"><span>${cnSlot(s)}</span></div>`).join('');
+  h+=`<div class="hint">主城类型/楼顶/楼底是三条不同的排布行，各自独立，改完点导出即可。</div>`;
+  h+=`<div class="row"><button onclick="revertRow(${ri});revertRow(${rf});revertRow(${rb});render();showCastle(${ri})">还原主城这三项</button></div>`;
+  $('sel').innerHTML=h;
+}
+function applyCand(i,k){const c=SEL_CANDS[k];
+  EDITS[i]=Object.assign({},EDITS[i],{slot:c.slot,mod:(c.mod===undefined?undefined:c.mod),var:(c.var===undefined?undefined:c.var)});
+  render();showRow(i,curRows()[i]);}
+function revertRow(i){delete EDITS[i];render();showRow(i,curRows()[i]);}
+/* ===================== 夜1 / 夜2 boss ===================== */
+function slotFile(s){const t=(''+s).padStart(4,'0');return 'm'+t.slice(0,2)+'_'+t.slice(2);}
+/* ★ 这一夜的 boss 候选（用户 2026-09-17 要求：既能像以前一样【随便换】，又跟着 bin【动态】）
+   = ① bin 里登记的这一夜 boss 池（MapPatternSet 聚合，原版就有那批 —— 以前就是它，不能被缩掉）
+   ∪ ② 这个夜王 × 地形下所有图【实际用过】的 boss（可能含 mod 新增的）
+   数字：① 的池权重 / ② 有多少张图用它。⛔ 不要只给 ② —— 那会变成"只能选这张图用过的"。 */
+function nightCands(day,nb,rm){
+  const out={};
+  ((DATA.nightPool&&DATA.nightPool[day])||[]).forEach(([b,w])=>{
+    if(b)out[b]={w:+w||0,n:0};});
+  seedsOf(nb,rm).forEach(pid=>{const pl=DATA.playAreas[String(pid)];if(!pl)return;
+    const b=slotToBoss(pl[2+day]);if(!b)return;
+    (out[b]=out[b]||{w:0,n:0}).n++;});
+  return Object.keys(out).map(Number).sort((a,b)=>a-b).map(b=>[b,out[b].w,out[b].n]);
+}
+/* 这个 boss 在【这个组合】里用的是哪个场地槽（换人时一起换） */
+function slotForNight(day,mod,nb,rm){
+  let hit=0;
+  seedsOf(nb,rm).forEach(pid=>{if(hit)return;const pl=DATA.playAreas[String(pid)];if(!pl)return;
+    if(slotToBoss(pl[2+day])===+mod)hit=pl[2+day];});
+  return hit||((DATA.bossSite&&DATA.bossSite.night&&DATA.bossSite.night[mod])||playVal()[2+day]);
+}
+function showNight(day){
+  SELMODE='night'+day;
+  const nb=+$('nightSel').value,rm=+$('rareSel').value;
+  const pool=nightCands(day,nb,rm),now=playVal()[2+day],nowBoss=slotToBoss(now);
+  let h=`<h3>第${day}夜 boss 候选（随便换；名单跟着当前 bin 动态来）</h3>`;
+  if(!pool.length)h+=`<div class="hint">当前 bin 里没有这一夜的 boss 记录。</div>`;
+  h+=pool.map(([b,w,n])=>{
+    const t=(w?('池权重 '+w):'')+(n?((w?' ／ ':'')+n+' 张图用它'):'');
+    return `<div class="cand${b===nowBoss?' sel':''}" onclick="setNight(${day},${b})"><span>${bossName(b)}</span><small>${t||'—'}</small></div>`;}).join('');
+  h+=`<div class="hint">共 ${pool.length} 个可选：名单 = bin 里登记的夜 boss 池 ＋ 本组合实际用过的（含 mod 新增的），全部读自当前 bin。</div>`;
+  h+=`<h3>或者：用你自己放进 mod 的场地（本体未占用的空槽）</h3>`;
+  h+=[4700,4710,4720,4730,4740,4750,4760,4900,4991,4992].map(s=>
+      `<div class="cand${now===s?' sel':''}" onclick="setNightSite(${day},${s})"><span>自制场地·槽 ${s}</span><small>${slotFile(s)}_00_00.msb</small></div>`).join('');
+  h+=`<div class="hint">用自制场地时，记得把 ${slotFile(now)}_00_00.msb.dcx 和对应 emevd 放进 mod 的 map\\mapstudio\\ 与 event\\ 里。</div>`;
+  h+=`<div class="row"><button onclick="clearNight(${day})">还原这一夜</button></div>`;
+  $('sel').innerHTML=h;
+}
+function setNightSite(day,slot){NEDIT[day]=Object.assign({},NEDIT[day],{site:slot});render();showNight(day);}
+function setNight(day,mod){const nb=+$('nightSel').value,rm=+$('rareSel').value;
+  NEDIT[day]=Object.assign({},NEDIT[day],{mod:mod,site:slotForNight(day,mod,nb,rm)});render();showNight(day);}
+function clearNight(day){delete NEDIT[day];render();showNight(day);}
+/* ==== 缩圈位置（按地形给定候选；第1夜/第2夜不通用）==== */
+function paPool(day){
+  const rm=+$('rareSel').value;
+  const p=(DATA.playAreaPool&&DATA.playAreaPool[String(rm)])||{};
+  const l=(p[String(day)]||[]).slice();
+  const now=playVal()[day];
+  if(now&&!l.includes(now))l.push(now);
+  return l;
+}
+function paTag(a){return a>=11000?'大空洞专用':(a>=1020?'该地形专属位置':'标准位置');}
+function showPA(day){
+  const now=playVal()[day],list=paPool(day);
+  let h=`<h3>第${day}夜 · 缩圈位置（点一下就换）</h3>`;
+  h+=list.map(a=>`<div class="cand${a===now?' sel':''}" onclick="setPA(${day},${a})"><span>${(DATA.playAreaCN&&DATA.playAreaCN[a])||('位置 '+a)}</span><small>${paTag(a)}</small></div>`).join('');
+  h+=`<div class="hint">这一夜可选 ${list.length} 个位置（按地形给：雪山/火山/隐城的第二夜是固定位置，腐败森林的第二夜在森林内两处之间随机；第一夜用该地形自己那批）。</div>`;
+  h+=`<div class="row"><button onclick="revertPA(${day})">还原这一夜的缩圈位置</button></div>`;
+  $('sel').innerHTML=h;
+}
+function setPA(day,a){NEDIT[day]=Object.assign({},NEDIT[day],{area:a});render();showPA(day);}
+function revertPA(day){if(NEDIT[day])delete NEDIT[day].area;render();showPA(day);}
+/* ===================== 导出 ===================== */
+function dl(name,text){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type:'text/csv'}));a.download=name;a.click();}
+const H_SB='ID,Name,unknown_0,patternId,attachId,smallBaseMapId,mapIndex,variationId,unknown_0x12,modifier';
+const H_PA='ID,Name,unknown_0,patternId,playArea1,playArea2,bossId1,bossId2,extraBossId1,extraBossId2,bossModifier1,bossModifier2,extraBossModifier1,extraBossModifier2';
+const H_FL='ID,Name,unknown_0,patternId,modifierSet,modifier,eventFlag,patternSetId,targetBoss,rareMap';
+/* ⚠️ 2026-09-17：原先这里还有「固定地形」用的 H_BF / BF_MODS / bfTerrRows / bfLine —— 已删。
+   原因：地形是"出击种子"算出来的（见 exportSeed 上方注释），改 LotBaseMapPatternFlag 的 weight 拦不住它。 */
+/* ⭐⭐ 2026-09-17 15:5x 重要修正（实测）：第 3 列 `unknown_0` **新增行也必须写 0**。
+   · 这一列是这张表第 1 个字段（`disableParam_NT` 那 4 个字节）——写 1 = 把这个位设上了。
+   · 证据：MMV 2.1.8（社区在用、能生效）往 `LotResultSmallBaseAndSpot` **追加的 80 行全是 0**；
+     而用户 2026-09-17 加"普通山羊交易"的那行被写成 1 ⇒ 编辑器显示有、**进游戏没有**（地图上也没有）。
+   · 旧写法（"新增行首行=1"）来自 2026-09-16 会话里的猜测样本，**是错的**，已全部去掉。
+   ⇒ 一律按行 id 查 `*UnknownOne` 表：老行写回原值（保 48 行不受损），新行自然得 0。 */
+const unkOne=(arr,id)=>((arr||[]).indexOf(String(id))>=0)?1:0;
+const sbLine=(id,pid,r,first,isNew)=>[id,'',unkOne(DATA.sbUnknownOne,id),pid,r[1],r[2],r[5],r[3],0,r[4]||0].join(',');
+const paLine=(id,pid,p,isNew)=>[id,'',unkOne(DATA.paUnknownOne,id),pid,p[1],p[2],p[3],p[4],p[7],p[8],p[5],p[6],p[9],p[10]].join(',');
+const flLine=(id,pid,f,isNew)=>[id,'',unkOne(DATA.flUnknownOne,id),pid,f[4]||0,f[3]||0,f[5]||0,f[6]||0,f[1],f[2]].join(',');
+function comboName(nb,rm){return (NIGHT_CN[nb]||('夜王'+nb))+'_'+(RARE_CN[rm]||rm);}
+/* 单张图的导出内容（只算、不下载）—— ① 单张导出 与 ⑨「一次全部导出」共用这一套逻辑
+   ⚠️ 顺序要紧：必须【先】 evApplyPointEdits()（把事件点位改动落进 EDITS）【再】取 curRows()，
+      否则事件点位（swap / place）的改动不会进据点表 CSV（2026-09-18 复核过）。 */
+function exportData(){
+  const pid=CUR.pattern;
+  const pinfo=evApplyPointEdits(pid);
+  const rows=curRows(), p=playVal(), notes=[];
+  const sb=rows.map(r=>sbLine(r[0],pid,r,false,false));
+  /* 夜boss表（LotResultPlayAreaParam）：这张图的缩圈 / boss 指向 + ⑧ 的「120 额外夜boss」两列
+     （原来这里是先导一份、再导一份同名文件覆盖，会下成两个文件 ⇒ 现已合并成一份） */
+  const pa=p.slice();
+  if(+evCurValue()===120){
+    pa[7]=+EV_BOSS;pa[9]=evBossMod(EV_BOSS);
+    notes.push('夜boss表：第1夜多打一只 <b>'+bossNameOfSlot(EV_BOSS)+'</b>（extraBossId1='+pa[7]+
+               ' / extraBossModifier1='+pa[9]+'）');
+  }
+  /* 登记表（LotResultMapPatternFlag）：事件（声明 / 第几天 / 点火）+ 出生点（起始区） */
+  const fl=[];
+  const wr=evWriteRows(pid).filter(x=>x.f);
+  wr.forEach(x=>{fl.push(flLine(x.rid,pid,x.f,false));
+    notes.push(x.tag+'（行 '+x.rid+'）：'+x.why);});
+  if(wr.length&&EV_SPARE)notes.push('<span class="mod">⚠ 其中一行是用这张图的「空行」腾出来写的（这张图原版没有事件）</span>');
+  const sa=startAreaRow(pid),curArea=curStartArea();
+  if(sa&&curArea!==null&&+curArea!==+sa.area){
+    const f=sa.row.slice();f[3]=START_BASE+curArea-1;
+    fl.push(flLine(sa.row[0],pid,f,false));
+    notes.push('出生点（行 '+sa.row[0]+'）：改成 <b>'+areaCN(curArea)+'</b>');
+  }
+  if(pinfo.length)notes.push('事件点位（已含在据点表里）：'+pinfo.map(x=>x[0]+' → '+x[1]).join('；'));
+  if(PM_PICK!==null){
+    const org=(CUR.rows[PM_PICK]||[0,0,0,0,0,0]);
+    notes.push('⑦ 山羊交易：用「'+attCN(org[1])+'」那一行腾出来放的（原来放的是：'+labelOf(org)+'）');
+  }
+  return {sb:sb,pa:paLine(pid,pid,pa,false),fl:fl,notes:notes};
+}
+function exportModify(){
+  const d=exportData(), pid=CUR.pattern;
+  const m1=`LotResultSmallBaseAndSpot_modify_${pid}.csv`, m2=`LotResultPlayAreaParam_modify_${pid}.csv`;
+  dl(m1,H_SB+'\n'+d.sb.join('\n'));
+  dl(m2,H_PA+'\n'+d.pa);
+  if(d.fl.length)dl(`LotResultMapPatternFlag_modify_${pid}.csv`,H_FL+'\n'+d.fl.join('\n'));
+  const extra=d.notes.length?('<br>· '+d.notes.join('<br>· ')):'';
+  $('exportMsg').innerHTML=`① 已导出（<b>覆盖</b>导入，不勾 Append）：<br>
+   · <b>${m1}</b> → 导到表 LotResultSmallBaseAndSpot（这张图整张排布）<br>
+   · <b>${m2}</b> → 导到表 LotResultPlayAreaParam（缩圈 / 夜boss 指向）`+
+   (d.fl.length?`<br>· <b>LotResultMapPatternFlag_modify_${pid}.csv</b> → 导到表 LotResultMapPatternFlag（事件 / 第几天 / 点火 / 出生点，共 ${d.fl.length} 行）`:'')+extra;
+}
+/* ⛔ 2026-09-17 实测结论（保留）：**不再生成"追加行"CSV** —— 往这两张表末尾加新行，游戏完全不认
+   （用户实测：干净底子 + 只追加一行 ⇒ 编辑器显示正常、进游戏没有；而**改现有行**立刻生效）。
+   ⇒ ⑦ 山羊交易走"腾一行出来替换"，改动已包含在据点表（覆盖导入）里。 */
+/* ===================== ② 算出「让游戏必定抽到这张图」的种子 =====================
+   原理（逆向 thefifthmatt 的随机化器，用户游戏 1.3.3.0 实测对账通过）：
+     val = SFMT19937(seed) 的第一个 32 位输出
+     地形档位 = val 按权重抽（普通 8400 / 雪山 400 / 火山 400 / 腐森 400 / 隐城 400）
+     偏移 = 档位0 ? val%20 : 20+(档位-1)*5 + val%5        （带变幻大地时： 基准+val%5）
+     patternId = 夜王号*40 + 偏移
+   所以下面就是"随机撞一个种子，直到它算出来的偏移 == 这张图的偏移"。 */
+function sfmtFirstU32(seed){
+  const N32=624,a=new Uint32Array(N32);
+  a[0]=seed>>>0;
+  for(let i=1;i<N32;i++)a[i]=(Math.imul(1812433253,(a[i-1]^(a[i-1]>>>30))>>>0)+i)>>>0;
+  const PAR=[1,0,0,0x13C9E684];
+  let num=0;for(let i=0;i<4;i++)num^=a[i]&PAR[i];
+  for(let i=16;i>0;i>>=1)num^=num>>>i;
+  if((num&1)===0){for(let i=0;i<4;i++){let bit=1;for(let j=0;j<32;j++){if(bit&PAR[i]){a[i]^=bit;break;}bit=(bit<<1)>>>0;}}}
+  let n=0,n2=488,n3=616,n4=620;
+  do{
+    a[n+3]=(a[n+3]^((a[n+3]<<8)>>>0)^(a[n+2]>>>24)^(a[n3+3]>>>8)^((a[n2+3]>>>11)&0xBFFFFFF6)^((a[n4+3]<<18)>>>0))>>>0;
+    a[n+2]=(a[n+2]^((a[n+2]<<8)>>>0)^(a[n+1]>>>24)^((a[n3+3]<<24)>>>0)^(a[n3+2]>>>8)^((a[n2+2]>>>11)&0xBFFAFFFF)^((a[n4+2]<<18)>>>0))>>>0;
+    a[n+1]=(a[n+1]^((a[n+1]<<8)>>>0)^(a[n]>>>24)^((a[n3+2]<<24)>>>0)^(a[n3+1]>>>8)^((a[n2+1]>>>11)&0xDDFECB7F)^((a[n4+1]<<18)>>>0))>>>0;
+    a[n]=(a[n]^((a[n]<<8)>>>0)^((a[n3+1]<<24)>>>0)^(a[n3]>>>8)^((a[n2]>>>11)&0xDFFFFFEF)^((a[n4]<<18)>>>0))>>>0;
+    n3=n4;n4=n;n+=4;n2+=4;if(n2>=624)n2=0;
+  }while(n<624);
+  return a[0];
+}
+const SEED_W=[8400,400,400,400,400],CONJURE_BASE={11:20,12:25,13:30,15:35};
+function patternOffsetOf(seed,conjured){
+  const val=sfmtFirstU32(seed>>>0);
+  let base=0,span=20;
+  if(CONJURE_BASE[conjured]){base=CONJURE_BASE[conjured];span=5;}
+  else{
+    let tot=0;for(const w of SEED_W)tot+=w;
+    const r=val%tot;let acc=0,idx=-1;
+    for(let i=0;i<SEED_W.length;i++){acc+=SEED_W[i];if(acc>r){idx=i;break;}}
+    if(idx>0){span=5;base=20+(idx-1)*5;}
+  }
+  return base+(val%span);
+}
+/* ⛔ 2026-09-18 用户要求：**删掉「算出锁定种子」这块**（地图编辑器用不到；锁定用 地图排布锁定器.bat 即可）
+   —— 原来这里的 exportSeed()/copySeed()/LAST_SEED 与右侧那张 ② 卡片一起删了。 */
+
+/* ⛔ 2026-09-18 用户定：**「存成新种子」整个删掉** —— 实测游戏不认"新增行"、空闲种子号在 bin 里一行都没有，
+   所以造不出新种子；编辑器只负责**改你读进来的游戏内已有的种子**（改现有行才生效）。
+   （原来这里的 fillTargets()/exportNew() 与右侧那张卡片一起删了。） */
+function fillTargets(){}          /* 占位：老测试若还调用它，不至于报错 */
+
+/* ============================================================
+   ⭐ 多事件版 evWriteRows（2026-09-18）：一张图可以挂【多个】事件（用户实测可行）
+   —— 声明在后面的同名函数会覆盖前面的 ⇒ 老的 evWriteRows 被这份接管
+   规则：第 1 条事件沿用这张图原版那些行（声明行 / 天数行 / 空行 / 藏宝图行）；
+        第 2 条起**腾别的行**来写（优先"没声明什么内容"的行，⛔ 不碰地形行/起始区行）
+   ============================================================ */
+function evAlloc(pid,used){                    /* 腾一行出来：优先"没声明什么"的行（mod=0） */
+  const pool=evFlagPool(pid,used);
+  return pool.find(x=>+x.row[3]===0&&+x.row[5]===0&&+x.row[4]!==0)   /* ① 空行/宝图行：没内容也没旗标 */
+      || pool.find(x=>+x.row[3]===0&&+x.row[5]===0)
+      || pool.find(x=>+x.row[3]===0)                                 /* ③ mod=0（带旗标也行 —— 实测这样腾能生效） */
+      || null;
+}
+function evWriteAll(pid){
+  const out=[];
+  if(isGHPid(pid))return out;                  /* ⛔ 大空洞不做 */
+  const gh=false, orig0=evDeclOf(pid);
+  const decl=evDeclRow(pid), day=evDayRow(pid), spare=evSpareRow(pid), bt=evBuriedRow(pid);
+  const used=new Set(); let first=true;
+  const take=()=>{const c=evAlloc(pid,used); if(c)used.add(+c.row[0]); return c;};
+  evForEach(()=>{
+    const cur=evCurValue(); const isFirst=first; first=false;
+    /* 取消事件（勾了"不要事件"）：把原版那两行清 0 */
+    if(!cur){
+      if(isFirst&&decl&&!used.has(+decl.row[0])){used.add(+decl.row[0]);
+        if(+decl.row[3]!==0||+decl.row[5]!==0){const f=decl.row.slice();f[3]=0;f[4]=0;f[5]=0;
+          out.push({rid:f[0],f:f,tag:'事件声明行',row:decl.row,why:'清成 0（这张图不再有事件）'});}}
+      if(isFirst&&day&&!used.has(+day.row[0])){used.add(+day.row[0]);
+        if(+day.row[3]!==0||+day.row[4]!==0||+day.row[5]!==0){const f=day.row.slice();f[3]=0;f[4]=0;f[5]=0;
+          out.push({rid:f[0],f:f,tag:'第几天行',row:day.row,why:'清成 0（= 原版「这张图没有事件」的写法）'});}}
+      return;
+    }
+    /* ---- 事件声明行 ---- */
+    if(isFirst&&decl&&!used.has(+decl.row[0])){
+      used.add(+decl.row[0]);
+      if(+cur!==+orig0){
+        const f=decl.row.slice();f[3]=cur;f[4]=0;f[5]=evDeclFlag(cur);
+        out.push({rid:f[0],f:f,tag:'事件声明行',row:decl.row,
+          why:(orig0?evName(orig0):'无事件')+' → '+evName(cur)+'（标志 '+decl.row[5]+' → '+f[5]+'）'});
+      }
+    }else if(isFirst&&!decl&&spare&&!used.has(+spare.row[0])){
+      used.add(+spare.row[0]);
+      const f=spare.row.slice();f[3]=cur;f[4]=0;f[5]=evDeclFlag(cur);
+      out.push({rid:f[0],f:f,tag:'腾出来的空行',row:spare.row,why:'原本全是 0 → 事件声明：'+evName(cur)+'（标志 → '+f[5]+'）'});
+    }else{
+      const c=take();
+      if(c){const f=c.row.slice();f[3]=cur;f[4]=0;f[5]=evDeclFlag(cur);
+        out.push({rid:f[0],f:f,tag:'事件声明行（腾行）',row:c.row,
+          why:'腾了这一行（原来放：'+labelOf(c.row)+'）→ 事件：'+evName(cur)+'（标志 '+f[5]+'）'});}
+      else out.push({rid:'—',f:null,tag:'事件声明行',why:'⚠ 这张图没有可腾的登记行了'});
+    }
+    /* ---- 第几天行 ---- */
+    if(isFirst&&day&&!used.has(+day.row[0])){
+      used.add(+day.row[0]);
+      const newSet=evSetOf(cur,gh), wantDay=(EV_DAY!==null?+EV_DAY:+day.row[3]);
+      if(newSet&&(+day.row[4]!==+newSet||+day.row[3]!==+wantDay)){
+        const f=day.row.slice();f[4]=newSet;f[3]=wantDay;f[5]=dayFlagFor(newSet,wantDay,kOfDayRow(day.row));
+        out.push({rid:f[0],f:f,tag:'第几天行',row:day.row,
+          why:(+day.row[3]===800?'第1天':'第2天')+'（组 '+day.row[4]+'） → '+(wantDay===800?'第1天':'第2天')+'（组 '+newSet+'）'});
+      }
+    }else if(isFirst&&!day&&bt&&!used.has(+bt.row[0])){
+      used.add(+bt.row[0]);
+      const f=bt.row.slice();f[3]=(EV_DAY!==null?+EV_DAY:800);f[4]=evSetOf(cur,gh);f[5]=dayFlagFor(f[4],f[3],0);
+      out.push({rid:f[0],f:f,tag:'第几天行（腾「藏宝图行」的位子）',row:bt.row,
+        why:'原版没有「第几天」行 ⇒ 用藏宝图行腾位子：组 '+f[4]+' / '+(f[3]===800?'第1天':'第2天')+' / 旗标 '+f[5]});
+    }else{
+      const c=take();
+      if(c){const f=c.row.slice();f[3]=(EV_DAY!==null?+EV_DAY:800);f[4]=evSetOf(cur,gh);f[5]=dayFlagFor(f[4],f[3],0);
+        out.push({rid:f[0],f:f,tag:'第几天行（腾行）',row:c.row,
+          why:'腾了这一行 → 组 '+f[4]+' / '+(f[3]===800?'第1天':'第2天')+' / 旗标 '+f[5]});}
+      else out.push({rid:'—',f:null,tag:'第几天行',why:'⚠ 没有可腾的登记行了（这张图塞不下更多事件）'});
+    }
+    /* ---- 点火行（140 癫火塔）---- */
+    if(evKind(cur)==='ignite'&&EV_IGN){
+      const need=(EV_IGN==='both')?['up','down']:[EV_IGN];
+      need.forEach(which=>{
+        const c=take();
+        if(!c){out.push({rid:'—',f:null,tag:'点火行',why:'⚠ 没有可腾的登记行放点火行'});return;}
+        const f=c.row.slice();f[3]=0;f[4]=3500;f[5]=IGNITE_TOWER[which];
+        out.push({rid:f[0],f:f,tag:'点火行',row:c.row,why:'点火（'+((which==='up')?'上面那座':'下面那座')+'）：组 3500 / 旗标 '+f[5]});
+      });
+    }
+  });
+  return out;
+}
+function evWriteRows(pid){ return evWriteAll(pid); }      /* 接管：多事件版 */
+
+/* =================================================================================
+   ⑨ 已修改地图：暂存 + 一次全导出（2026-09-18 用户要求）
+   用户原话：「我想要改好多个地图，需要分好多次来导出，不太方便……载入别的种子，我之前修改就没了，
+             只能修改完一张就不断导出，我只是不想这样而已」
+   ⇒ ① 每改一张【自动存住】（换种子 / 刷新页面 / 关掉重开都不丢）
+      ② 「已修改地图」按钮点开 = 列出改过的图（哪个种子、改了什么），点「载回」= 变回当时改完的样子
+      ③ 「一次导出全部已修改」= 十几张图一次导出（按表合并成 3 份 CSV，覆盖导入）
+   ⚠️ 存的是"改动状态"（行序号级），与当前 data.js 配套；换 bin 刷新数据后行序号可能偏移，
+      所以面板上一直显示这份暂存放在哪个 bin 上。
+   ================================================================================= */
+const MS_KEY='NR_MODMAPS_v1';
+let MSTORE={};          /* pid -> {snap, bin, t} */
+let MS_BIN='';          /* 这份暂存是在哪个 bin 上做的（只用来提示） */
+let MS_OPEN=false;      /* 「已修改地图」列表是否展开 */
+const msDeep=o=>JSON.parse(JSON.stringify(o));
+function msSnap(){
+  return msDeep({EDITS:EDITS,NEDIT:NEDIT,SEDIT:SEDIT,PM_PICK:PM_PICK,PM_NOBORROW:PM_NOBORROW,
+    PM_MULTI:PM_MULTI,EV_LIST:EV_LIST,EV_SEL:EV_SEL,EV_VALUE:EV_VALUE,EV_OFF:EV_OFF,
+    EV_DAY:EV_DAY,EV_SPARE:EV_SPARE,EV_SWAP:EV_SWAP,EV_PLACE:EV_PLACE,EV_IGN:EV_IGN,EV_BOSS:EV_BOSS});
+}
+function msApply(s){
+  if(!s)return;
+  EDITS=s.EDITS||{};NEDIT=s.NEDIT||{};
+  SEDIT=(s.SEDIT===undefined?null:s.SEDIT);
+  PM_PICK=(s.PM_PICK===undefined?null:s.PM_PICK);PM_NOBORROW=!!(s.PM_NOBORROW!==undefined?s.PM_NOBORROW:s.PM_CHOOSE);PM_MULTI=(s.PM_MULTI||[]).slice();
+  EV_BOSS=(s.EV_BOSS===undefined?4840:s.EV_BOSS);
+  EV_LIST=(s.EV_LIST||[]).map(e=>e);EV_SEL=+s.EV_SEL||0;
+  SEL=null;SELMODE=null;SEL_CANDS=[];
+  evList();evLoad(Math.max(0,Math.min(EV_SEL,EV_LIST.length-1)));
+}
+function msChanged(){
+  if(!CUR)return false;
+  if(Object.keys(EDITS).length||Object.keys(NEDIT).length)return true;
+  if(SEDIT!==null&&SEDIT!==undefined)return true;
+  if(PM_PICK!==null)return true;
+  if(PM_MULTI&&PM_MULTI.length)return true;
+  return (EV_LIST||[]).some(e=>e&&(e.v||e.day||e.off||Object.keys(e.swap||{}).length||(e.place||[]).length||e.ign));
+}
+function msPersist(){
+  try{ if(typeof localStorage==='undefined')return;
+    localStorage.setItem(MS_KEY,JSON.stringify({bin:(DATA.meta&&DATA.meta.source)||'',maps:MSTORE}));
+  }catch(e){}
+}
+function msBoot(){
+  try{ if(typeof localStorage==='undefined')return;
+    const raw=localStorage.getItem(MS_KEY);if(!raw)return;
+    const o=JSON.parse(raw);MSTORE=o.maps||{};MS_BIN=o.bin||'';
+  }catch(e){MSTORE={};}
+}
+function msSaveCur(){
+  if(!CUR)return;
+  const pid=+CUR.pattern;
+  if(msChanged())MSTORE[pid]={snap:msSnap(),bin:(DATA.meta&&DATA.meta.source)||'',t:Date.now()};
+  else if(MSTORE[pid])delete MSTORE[pid];
+  msPersist();
+}
+const msCount=()=>Object.keys(MSTORE).length;
+function msTitle(pid){
+  const c=DATA.patternCombo&&DATA.patternCombo[String(pid)];
+  return c?((NIGHT_CN[c[0]]||('夜王'+c[0]))+' × '+(RARE_CN[c[1]]||c[1])):'';
+}
+function msWhat(pid){                       /* 这张图改了什么（一句话） */
+  const s=MSTORE[pid]&&MSTORE[pid].snap;if(!s)return '';
+  const bits=[];
+  const n=Object.keys(s.EDITS||{}).length;if(n)bits.push(n+' 处点位');
+  const nd=Object.keys(s.NEDIT||{}).length;if(nd)bits.push(nd+' 个夜boss/缩圈');
+  if(s.SEDIT!==null&&s.SEDIT!==undefined)bits.push('出生点');
+  if(s.PM_PICK!==null&&s.PM_PICK!==undefined)bits.push('山羊交易');
+  const ev=(s.EV_LIST||[]).filter(e=>e&&(e.v||e.day||e.off));
+  if(ev.length)bits.push('事件：'+ev.map(e=>(e.off?'不要事件':evName(e.v))).join(' + '));
+  return bits.length?bits.join(' / '):'（只有点位微调）';
+}
+function msToggle(){MS_OPEN=!MS_OPEN;showModBox();}
+function msLoadPid(pid){
+  msSaveCur();
+  const c=DATA.patternCombo&&DATA.patternCombo[String(pid)];
+  if(c&&$('nightSel')&&$('rareSel')){
+    $('nightSel').value=c[0];$('rareSel').value=c[1];onCombo();
+    const sel=$('seedSel');
+    if(sel&&sel.options){for(let i=0;i<sel.options.length;i++)if(+sel.options[i].value===+pid){sel.value=String(pid);break;}}
+    else if(sel)sel.value=String(pid);
+  }else if($('seedSel'))$('seedSel').value=String(pid);
+  loadSeed();
+  $('modMsg').innerHTML='已载回 <b>种子 '+pid+'</b> 的修改，可以接着改。';
+}
+function msWipeCurEdits(){                  /* 把当前这张的改动全部撤掉（删暂存时用） */
+  EDITS={};NEDIT={};SEDIT=null;PM_PICK=null;PM_CHOOSE=false;PM_MULTI=[];
+  evResetPoints();EV_LIST=[];EV_SEL=0;EV_VALUE=null;EV_OFF=false;EV_DAY=null;EV_SPARE=false;
+}
+function msDel(pid){
+  delete MSTORE[pid];msPersist();
+  if(CUR&&+CUR.pattern===+pid){msWipeCurEdits();render();}
+  else showModBox();
+  $('modMsg').innerHTML='已把 <b>种子 '+pid+'</b> 从「已修改地图」里删掉（bin 里的数据不受影响）。';
+}
+function msClearAll(){
+  const n=msCount();MSTORE={};msPersist();
+  if(CUR){msWipeCurEdits();render();}else showModBox();
+  $('modMsg').innerHTML='已清空暂存（'+n+' 张）。bin 里的数据不受影响。';
+}
+function showModBox(){
+  const box=$('modBox');if(!box)return;
+  const pids=Object.keys(MSTORE).map(Number).sort((a,b)=>a-b);
+  let h='<div class="hint" style="margin-top:0">你改过的每张图都会<b>自动存在这里</b>'+
+    '（换种子 / 刷新页面都不会丢）。攒够了一次导出即可，不用一张张导。'+
+    (MS_BIN?'<br><span style="opacity:.72">这份暂存是在 bin：'+MS_BIN+' 上做的</span>':'')+'</div>';
+  h+='<div class="row"><button class="primary" onclick="msToggle()">「已修改地图」（'+pids.length+' 张）</button>'+
+     '<button onclick="msExportAll()">一次导出全部已修改</button></div>';
+  if(MS_OPEN){
+    if(!pids.length)h+='<div class="hint">还没有改过任何图。</div>';
+    pids.forEach(p=>{
+      const cur=(CUR&&+CUR.pattern===+p);
+      h+='<div class="cand'+(cur?' sel':'')+'"><span>种子 '+p+(cur?'（正在看这张）':'')+
+         '<br><small>'+msTitle(p)+' ｜ '+msWhat(p)+'</small></span>'+
+         '<small><button onclick="msLoadPid('+p+')">载回</button> <button onclick="msDel('+p+')">×</button></small></div>';
+    });
+    if(pids.length)h+='<div class="row"><button onclick="msClearAll()">清空全部暂存</button></div>';
+  }
+  box.innerHTML=h;
+}
+/* 一次导出：把每张已修改的图按【它的暂存状态】重算一遍，再按表合并成 3 份 CSV */
+function msExportAll(){
+  if(!CUR){$('modMsg').innerHTML='先载入一个种子。';return;}
+  msSaveCur();
+  const pids=Object.keys(MSTORE).map(Number).sort((a,b)=>a-b);
+  if(!pids.length){$('modMsg').innerHTML='还没有改过任何图 —— 先改一张试试。';return;}
+  const keep={snap:msSnap(),CUR:CUR};
+  const SB=[],PA=[],FL=[],notes=[],seen={sb:{},pa:{},fl:{}};
+  const add=(arr,dict,lines)=>lines.forEach(l=>{const id=l.split(',')[0];
+    if(dict[id])return;dict[id]=1;arr.push(l);});
+  pids.forEach(p=>{
+    msApply(MSTORE[p].snap);
+    CUR={pattern:p,rows:(DATA.patterns[p]||[]).map(r=>r.slice()),play:(DATA.playAreas[p]||[]).slice()};
+    const d=exportData();
+    add(SB,seen.sb,d.sb);add(PA,seen.pa,[d.pa]);add(FL,seen.fl,d.fl);
+    notes.push('<b>种子 '+p+'</b>（'+msTitle(p)+'）：'+(d.notes.length?d.notes.join('；'):'—'));
+  });
+  msApply(keep.snap);CUR=keep.CUR;render();                 /* 还原现场 */
+  const f1='LotResultSmallBaseAndSpot_allmaps.csv',f2='LotResultPlayAreaParam_allmaps.csv',
+        f3='LotResultMapPatternFlag_allmaps.csv';
+  dl(f1,H_SB+'\n'+SB.join('\n'));
+  dl(f2,H_PA+'\n'+PA.join('\n'));
+  if(FL.length)dl(f3,H_FL+'\n'+FL.join('\n'));
+  $('modMsg').innerHTML='已一次导出 <b>'+pids.length+' 张</b>已修改地图的 CSV（全部<b>覆盖</b>导入、<b>不勾</b> Append）：'+
+    '<br>· <b>'+f1+'</b> → 表 LotResultSmallBaseAndSpot（'+SB.length+' 行）'+
+    '<br>· <b>'+f2+'</b> → 表 LotResultPlayAreaParam（'+PA.length+' 行）'+
+    (FL.length?'<br>· <b>'+f3+'</b> → 表 LotResultMapPatternFlag（'+FL.length+' 行）':'')+
+    '<br>各张改了什么：<br>'+notes.join('<br>');
+}
+
+/* =================================================================================
+   ★ 使用教程：可拖拽悬浮窗（用户 2026-09-18 原话）
+     「给我再加一个按钮，弄成一个可以随便拖拽的不和那些放一起的悬浮窗一样的指导教程，
+       这个不能碍眼，要可以点开，也可以隐藏，隐藏以后再打开的按钮放最上面。就叫使用教程。
+       简单教一下怎么修改，然后还有导入smithbox。因为我准备上传n网作为一个mod」
+   · 按钮在最上面（#tutBtn），点一下开/关；关掉后按钮还在，随时能再打开
+   · 悬浮窗按住标题栏可以拖到任意位置（默认贴右侧；拖过的位置与开关状态会记住）
+   ================================================================================= */
+const TUT_KEY='NR_TUT_v1';
+/* 状态：show=要不要显示这个教程（最上面那个按钮控制）
+        min =【最小化】：窗缩成一个小按钮，只留一个「放大」，不挡路（窗上的 — 控制）
+   首次打开默认展开（让第一次用的人一眼看到）；之后按用户的选择记住 */
+let TUT={show:true,min:false,x:null,y:null};
+function tutPersist(){try{if(typeof localStorage==='undefined')return;localStorage.setItem(TUT_KEY,JSON.stringify(TUT));}catch(e){}}
+function tutBoot(){
+  try{if(typeof localStorage==='undefined')return;const raw=localStorage.getItem(TUT_KEY);if(!raw)return;
+    const o=JSON.parse(raw);
+    TUT={show:(o.show===true),min:(o.min===true),x:(o.x===undefined?null:o.x),y:(o.y===undefined?null:o.y)};}catch(e){}
+}
+/* 把位置同时写到窗和小按钮上（哪个可见就显示哪个） */
+function tutPlace(){
+  ['tutWin','tutMini'].forEach(id=>{const e=$(id);if(!e)return;
+    if(TUT.x!==null){e.style.left=TUT.x+'px';e.style.top=TUT.y+'px';e.style.right='auto';}
+    else{e.style.left='';e.style.top='';e.style.right='16px';}});
+}
+function tutApply(){
+  const w=$('tutWin'),c=$('tutMini'),b=$('tutBtn');
+  const expanded=(TUT.show&&!TUT.min),mini=(TUT.show&&TUT.min);
+  if(w)w.style.display=expanded?'block':'none';
+  if(c)c.style.display=mini?'flex':'none';
+  if(b)b.textContent=TUT.show?'📖 使用教程（点我收起）':'📖 使用教程';
+  tutPlace();
+}
+function tutToggle(){TUT.show=!TUT.show;if(TUT.show)TUT.min=false;tutPersist();tutApply();}
+function tutHide(){TUT.show=false;tutPersist();tutApply();}      /* 完全关掉（上面按钮再点回来） */
+function tutMin(){TUT.show=true;TUT.min=true;tutPersist();tutApply();}   /* 缩成小按钮 */
+function tutMax(){if(TUT_JUSTDRAG){TUT_JUSTDRAG=false;return;}TUT.show=true;TUT.min=false;tutPersist();tutApply();}
+/* 把窗挪到 (x,y)：坐标夹在视口内，别拖丢了 */
+function tutMoveTo(x,y){
+  const w=$('tutWin');if(!w)return;
+  const VW=(typeof window!=='undefined'&&window.innerWidth)||1200;
+  const VH=(typeof window!=='undefined'&&window.innerHeight)||800;
+  const ww=w.offsetWidth||400;
+  TUT.x=Math.max(0,Math.min(VW-Math.min(ww,80),Math.round(x)));
+  TUT.y=Math.max(0,Math.min(VH-30,Math.round(y)));
+  tutPlace();
+}
+let TUT_DRAG=null,TUT_JUSTDRAG=false;
+function tutDragStart(ev){
+  const el=((ev&&ev.currentTarget)||$('tutWin'));
+  if(!el)return;
+  const r=(el.getBoundingClientRect&&el.getBoundingClientRect())||{left:0,top:0};
+  TUT_DRAG={dx:((ev&&ev.clientX)||0)-r.left,dy:((ev&&ev.clientY)||0)-r.top,moved:false};
+  if(ev&&ev.preventDefault)ev.preventDefault();
+}
+function tutDragMove(ev){
+  if(!TUT_DRAG)return;
+  TUT_DRAG.moved=true;
+  tutMoveTo(((ev&&ev.clientX)||0)-TUT_DRAG.dx,((ev&&ev.clientY)||0)-TUT_DRAG.dy);
+}
+function tutDragEnd(){
+  if(TUT_DRAG&&TUT_DRAG.moved){TUT_JUSTDRAG=true;tutPersist();}   /* 刚拖过 ⇒ 忽略随后的 click，别误展开 */
+  TUT_DRAG=null;
+}
+function tutReset(){TUT.x=null;TUT.y=null;tutPlace();tutPersist();}
+function tutWire(){
+  /* ⚠️ 每一步都要判存在：老浏览器/测试用的假 DOM 缺 API 时不能把整个脚本带崩 */
+  ['tutBar','tutMini'].forEach(id=>{const el=$(id);
+    if(el&&el.addEventListener)el.addEventListener('mousedown',tutDragStart);});
+  if(document&&document.addEventListener){
+    document.addEventListener('mousemove',tutDragMove);
+    document.addEventListener('mouseup',tutDragEnd);
+  }
+}
+
+(function(){
+  if(!DATA){document.getElementById('right').insertAdjacentHTML('afterbegin','<div class="mod">data.js 没加载上：确认它与 index.html 在同一目录。</div>');return;}
+  /* ★ 版本时间戳（改了页面就更新这里，方便确认浏览器有没有刷到新版） */
+  const BUILD='2026-09-18 22:05 版';
+  const bi=$('buildInfo');if(bi)bi.innerHTML='页面版本：<b>'+BUILD+'</b>　<span style="opacity:.75">（若你刚改过页面却还显示旧时间，说明浏览器缓存着旧页面，按 Ctrl+F5 / Ctrl+Shift+R 强刷）</span>';
+  $('srcInfo').innerHTML='数据源 bin：<b>'+(DATA.meta.source||'—')+'</b><br><span style="opacity:.75">'+
+    '要换读取哪份 bin → 双击 <b>打开地图种子编辑器.bat</b>（编辑器自己的启动器：选 bin → 刷新数据 → 打开编辑器）</span>';
+  const ns=$('nightSel');[0,1,2,3,4,5,6,7,8,9].forEach(b=>{const o=document.createElement('option');o.value=b;o.textContent=NIGHT_CN[b]||('夜王'+b);ns.appendChild(o);});
+  const rs=$('rareSel');[['0','普通地图 Limveld'],['1','雪山'],['2','火山'],['3','腐败森林'],['5','隐城']]
+    .forEach(([v,t])=>{const o=document.createElement('option');o.value=v;o.textContent=t;rs.appendChild(o);});
+  ns.value=0;rs.value=0;               // 显式给默认值，不依赖浏览器自动选中
+  msBoot();                            // ⑨ 把上次遗留的「已修改地图」暂存读回来
+  tutBoot();tutWire();tutApply();      // 📖 使用教程：读回开关/位置并接上拖拽
+  onCombo();loadSeed();
+})();
+</script>
+</body>
+</html>

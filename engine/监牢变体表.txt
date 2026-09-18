@@ -1,0 +1,59 @@
+=== 监牢A（低阶） 槽 4650  场地 m46_50_00_00 ===
+   实体 46500860  Omen (Evergaol)                        凶兆
+   实体 46500870  Grave Warden Duelist (Evergaol)        墓守决斗者
+   实体 46500830  Misbegotten (Evergaol)                 狮子混种   [组 46505850,46505851]
+   实体 46500831  Misbegotten (Evergaol)                 狮子混种   [组 46505850,46505851]
+   实体 46500832  Misbegotten (Evergaol, Winged)         有翼狮子混种   [组 46505850,46505851]
+   实体 46500833  Misbegotten (Evergaol)                 狮子混种   [组 46505850,46505851]
+   实体 46500835  Scaly Misbegotten (Evergaol)           鳞皮狮子混种   [组 46505850,46505851]
+   实体 46500836  Scaly Misbegotten (Evergaol)           鳞皮狮子混种   [组 46505850,46505851]
+   实体 46500837  Scaly Misbegotten (Evergaol)           鳞皮狮子混种   [组 46505850,46505851]
+   实体 46500820  Azula Beastman (Evergaol, Cleaver)     阿祖拉兽人（砍刀）   [组 46505840,46505841]
+   实体 46500821  Azula Beastman (Evergaol, Curved Sword) 阿祖拉兽人（弯刀）   [组 46505840,46505841]
+   实体 46500822  Azula Beastman (Evergaol, Curved Sword) 阿祖拉兽人（弯刀）   [组 46505840,46505841]
+   实体 46500824  Azula Beastman (Evergaol, Shield)      阿祖拉兽人（盾）   [组 46505840,46505841]
+   实体 46500826  Azula Beastman (Evergaol, Cleaver)     阿祖拉兽人（砍刀）   [组 46505840,46505841]
+   实体 46500827  Azula Beastman (Evergaol, Cleaver)     阿祖拉兽人（砍刀）   [组 46505840,46505841]
+   变体 2  → 单体：凶兆
+   变体 3  → 单体：墓守决斗者
+   变体 4  → 族：阿祖拉兽人（弯刀）／阿祖拉兽人（盾）／阿祖拉兽人（砍刀）
+   变体 5  → 族：有翼狮子混种／狮子混种／鳞皮狮子混种
+
+=== 监牢B（中阶） 槽 4660  场地 m46_60_00_00 ===
+   实体 46600840  Banished Knight (Evergaol, Shield)     失乡骑士（盾）   [组 46605840,46605841]
+   实体 46600841  Banished Knight (Evergaol, Dual Swords) 失乡骑士（双剑）   [组 46605840,46605841]
+   实体 46600842  Banished Knight (Evergaol, Halberd)    失乡骑士（戟）   [组 46605840,46605841]
+   实体 46600851  Nox Monk (Evergaol)                    诺克斯僧侣   [组 46605850,46605851]
+   实体 46600852  Nox Swordstress (Evergaol)             诺克斯剑士   [组 46605850,46605851]
+   实体 46600820  Crystalian (Evergaol, Spear)           结晶人（矛）   [组 46605820,46605821]
+   实体 46600821  Crystalian (Evergaol, Ringblade)       结晶人（环刃）   [组 46605820,46605821]
+   实体 46600822  Crystalian (Evergaol, Staff)           结晶人（法杖）   [组 46605820,46605821]
+   实体 46600830  Alabaster Lord (Evergaol)              白玉王   [组 46605830,46605831]
+   实体 46600831  Onyx Lord (Evergaol)                   玛瑙王   [组 46605830,46605831]
+   实体 46600860  Bloodhound Knight (Evergaol)           猎犬骑士
+   变体 2  → 族：结晶人（法杖）／结晶人（环刃）／结晶人（矛）
+   变体 3  → 族：玛瑙王／白玉王
+   变体 4  → 族：失乡骑士（双剑）／失乡骑士（戟）／失乡骑士（盾）
+   变体 5  → 族：诺克斯僧侣／诺克斯剑士
+   变体 6  → 单体：猎犬骑士
+
+=== 监牢C（中阶） 槽 4670  场地 m46_70_00_00 ===
+   实体 46700830  Crucible Knight (Evergaol, Sword)      熔炉骑士（剑）
+   实体 46700840  Crucible Knight (Evergaol, Treespear)  熔炉骑士（树枪）
+   实体 46700810  Godskin Apostle (Evergaol)             神皮使徒
+   实体 46700820  Godskin Noble (Evergaol)               神皮贵族
+   实体 46700800  Dragonkin Soldier (Evergaol)           龙人兵
+   变体 0  → 单体：龙人兵
+   变体 1  → 单体：神皮使徒
+   变体 2  → 单体：神皮贵族
+   变体 3  → 单体：熔炉骑士（剑）
+   变体 4  → 单体：熔炉骑士（树枪）
+
+=== 监牢D（高阶） 槽 4680  场地 m46_80_00_00 ===
+   实体 46800820  Godskin Apostle (The Oldest Gaol)      神皮使徒   [组 46805800,46805801]
+   实体 46800821  Godskin Noble (The Oldest Gaol)        神皮贵族   [组 46805800,46805801]
+   实体 46800810  Ancient Dragon (The Oldest Gaol)       古龙
+   实体 46800800  Death Rite Bird (The Oldest Gaol)      死亡仪式鸟
+   变体 0  → 单体：死亡仪式鸟
+   变体 1  → 单体：古龙
+   变体 2  → 族：神皮使徒／神皮贵族
