@@ -2,6 +2,9 @@
 
 An all-in-one **map editor + map-seed locker** for *ELDEN RING NIGHTREIGN* (`regulation.bin`).
 
+* **Author:** `zhz138` on Nexus Mods — same author as the GitHub account `nova-lyra` (both accounts are mine).
+* **Nexus mod page:** https://www.nexusmods.com/eldenringnightreign/mods/872
+
 ## What it does
 
 1. **Reads any `regulation.bin`** with its own unpacker (AES-256-CBC + DCX/ZSTD + BND4) — no third-party tools needed.
